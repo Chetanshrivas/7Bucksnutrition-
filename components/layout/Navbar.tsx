@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCart } from "../cart/CartProvider";
 import { useAuth } from "../auth/AuthProvider";
@@ -39,7 +39,7 @@ function ArrowRight() {
   );
 }
 
-export function Navbar() {
+function NavbarContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -768,6 +768,14 @@ export function Navbar() {
         </div>
       </div>
     </header>
+  );
+}
+
+export function Navbar() {
+  return (
+    <Suspense fallback={null}>
+      <NavbarContent />
+    </Suspense>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -122,10 +122,10 @@ function CheckIcon() {
 }
 
 /* =========================================================
-   SHOP PAGE
+   SHOP PAGE (inner content — uses useSearchParams)
 ========================================================= */
 
-export default function ShopPage() {
+function ShopPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -1932,5 +1932,19 @@ export default function ShopPage() {
       </section>
 
     </main>
+  );
+}
+
+/* =========================================================
+   EXPORTED WRAPPER — Suspense boundary for useSearchParams()
+   fixes: "useSearchParams() should be wrapped in a suspense
+   boundary" build error on Vercel.
+========================================================= */
+
+export default function ShopPage() {
+  return (
+    <Suspense fallback={null}>
+      <ShopPageContent />
+    </Suspense>
   );
 }
