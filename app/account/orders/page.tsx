@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useState } from "react";
 
 import { useAuth } from "../../../components/auth/AuthProvider";
 import { supabase } from "../../../lib/supabase";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 type OrderItem = {
   id: string;
@@ -47,9 +45,7 @@ type Order = {
   order_items: OrderItem[];
 };
 
-// ---------------------------------------------------------------------------
 // Icons
-// ---------------------------------------------------------------------------
 
 function PackageIcon() {
   return (
@@ -109,9 +105,7 @@ function MapPinIcon() {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Status labels / colors
-// ---------------------------------------------------------------------------
 
 const ORDER_STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
@@ -199,9 +193,7 @@ function getShippingAddress(address: Record<string, unknown> | null | undefined)
   return { fullName, line1, line2, landmark, city, state, pincode, phone, email };
 }
 
-// ---------------------------------------------------------------------------
 // Order card (list view)
-// ---------------------------------------------------------------------------
 
 function OrderCard({ order, onOpen }: { order: Order; onOpen: (id: string) => void }) {
   const itemCount = order.order_items.reduce((sum, item) => sum + item.quantity, 0);
@@ -264,9 +256,7 @@ function OrderCard({ order, onOpen }: { order: Order; onOpen: (id: string) => vo
   );
 }
 
-// ---------------------------------------------------------------------------
 // Order detail view
-// ---------------------------------------------------------------------------
 
 function OrderDetailView({ order, onBack }: { order: Order; onBack: () => void }) {
   const shippingAddress = getShippingAddress(order.shipping_address);
@@ -536,11 +526,9 @@ function OrderDetailView({ order, onBack }: { order: Order; onBack: () => void }
   );
 }
 
-// ---------------------------------------------------------------------------
 // Main page
-// ---------------------------------------------------------------------------
 
-export default function OrdersPage() {
+function OrdersPageInner() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -767,5 +755,34 @@ export default function OrdersPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+
+function OrdersPageLoadingFallback() {
+  return (
+    <main className="min-h-screen overflow-x-hidden bg-white px-5 pt-28 sm:px-8 sm:pt-32">
+      <div className="mx-auto max-w-4xl">
+        <div className="h-3 w-24 animate-pulse rounded-full bg-black/10" />
+        <div className="mt-4 h-10 w-56 max-w-full animate-pulse rounded-xl bg-black/10" />
+
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {[1, 2, 3, 4].map((item) => (
+            <div
+              key={item}
+              className="h-40 animate-pulse rounded-[24px] border border-black/[0.05] bg-black/[0.04]"
+            />
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<OrdersPageLoadingFallback />}>
+      <OrdersPageInner />
+    </Suspense>
   );
 }
