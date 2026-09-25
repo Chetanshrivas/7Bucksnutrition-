@@ -39,6 +39,15 @@ type PlaceOrderResponse = {
   currency: string;
 };
 
+// Shared classes: text-base on mobile + text-sm from sm: up.
+// This is the fix for the classic iOS Safari "page auto-zooms
+// when you tap an input" bug — Safari zooms in on any input
+// whose computed font-size is below 16px. Keeping it at 16px
+// (text-base) on small screens, and only shrinking to 14px on
+// sm:+ screens, makes the whole form feel "responsive" on phones.
+const inputBase =
+  "w-full rounded-xl border border-border bg-ivory px-4 text-base sm:text-sm outline-none transition placeholder:text-espresso/25 focus:border-espresso/40";
+
 export default function CheckoutPage() {
   const router = useRouter();
 
@@ -344,13 +353,13 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <main className="min-h-screen bg-ivory text-espresso">
+      <main className="min-h-screen overflow-x-hidden bg-ivory text-espresso">
         <section className="mx-auto flex min-h-[75vh] max-w-[900px] flex-col items-center justify-center px-5 pt-24 text-center">
           <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-clay">
             Seven Bucks Nutrition
           </p>
 
-          <h1 className="mt-5 font-serif text-5xl italic tracking-[-0.04em] sm:text-6xl">
+          <h1 className="mt-5 break-words font-serif text-4xl italic leading-tight tracking-[-0.03em] sm:text-6xl">
             Your bag is empty.
           </h1>
 
@@ -371,10 +380,10 @@ export default function CheckoutPage() {
   }
 
   return (
-    <main className="min-h-screen bg-ivory text-espresso">
-      <section className="border-b border-border px-5 pb-10 pt-28 sm:px-8 lg:px-12">
+    <main className="min-h-screen overflow-x-hidden bg-ivory text-espresso">
+      <section className="border-b border-border px-5 pb-8 pt-24 sm:px-8 sm:pb-10 sm:pt-28 lg:px-12">
         <div className="mx-auto max-w-[1440px]">
-          <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-espresso/40">
+          <div className="flex flex-wrap items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-espresso/40">
             <Link
               href="/cart"
               className="transition hover:text-espresso"
@@ -394,7 +403,7 @@ export default function CheckoutPage() {
               Seven Bucks Nutrition
             </p>
 
-            <h1 className="mt-3 text-5xl font-semibold tracking-[-0.06em] sm:text-6xl lg:text-7xl">
+            <h1 className="mt-3 break-words text-4xl font-semibold leading-[1.05] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
               Checkout
             </h1>
 
@@ -407,24 +416,24 @@ export default function CheckoutPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 lg:px-12 lg:py-16">
+      <section className="mx-auto max-w-[1440px] px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-16">
         <form
           onSubmit={handleSubmit}
-          className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-16"
+          className="grid grid-cols-1 gap-8 sm:gap-10 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-16"
         >
-          <div className="space-y-8">
-            <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
+          <div className="space-y-6 sm:space-y-8">
+            <section className="rounded-2xl border border-border bg-card p-4 sm:p-5 md:p-7">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-clay">
                   01 — Contact
                 </p>
 
-                <h2 className="mt-2 text-xl font-semibold tracking-tight">
+                <h2 className="mt-2 text-lg font-semibold tracking-tight sm:text-xl">
                   Your details
                 </h2>
               </div>
 
-              <div className="mt-6 grid gap-5 sm:grid-cols-2">
+              <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <label className="sm:col-span-2">
                   <span className="mb-2 block text-[9px] font-bold uppercase tracking-[0.16em] text-espresso/55">
                     Full Name
@@ -442,7 +451,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="Your full name"
-                    className="h-12 w-full rounded-xl border border-border bg-ivory px-4 text-sm outline-none transition placeholder:text-espresso/25 focus:border-espresso/40"
+                    className={`h-12 ${inputBase}`}
                   />
                 </label>
 
@@ -463,7 +472,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="you@example.com"
-                    className="h-12 w-full rounded-xl border border-border bg-ivory px-4 text-sm outline-none transition placeholder:text-espresso/25 focus:border-espresso/40"
+                    className={`h-12 ${inputBase}`}
                   />
                 </label>
 
@@ -487,24 +496,24 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="10-digit mobile number"
-                    className="h-12 w-full rounded-xl border border-border bg-ivory px-4 text-sm outline-none transition placeholder:text-espresso/25 focus:border-espresso/40"
+                    className={`h-12 ${inputBase}`}
                   />
                 </label>
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
+            <section className="rounded-2xl border border-border bg-card p-4 sm:p-5 md:p-7">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-clay">
                   02 — Delivery
                 </p>
 
-                <h2 className="mt-2 text-xl font-semibold tracking-tight">
+                <h2 className="mt-2 text-lg font-semibold tracking-tight sm:text-xl">
                   Delivery address
                 </h2>
               </div>
 
-              <div className="mt-6 grid gap-5 sm:grid-cols-2">
+              <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <label className="sm:col-span-2">
                   <span className="mb-2 block text-[9px] font-bold uppercase tracking-[0.16em] text-espresso/55">
                     Address
@@ -522,7 +531,7 @@ export default function CheckoutPage() {
                     }
                     placeholder="House / Flat / Street / Area"
                     rows={3}
-                    className="w-full resize-none rounded-xl border border-border bg-ivory px-4 py-3 text-sm outline-none transition placeholder:text-espresso/25 focus:border-espresso/40"
+                    className={`resize-none py-3 ${inputBase}`}
                   />
                 </label>
 
@@ -545,7 +554,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="Nearby landmark"
-                    className="h-12 w-full rounded-xl border border-border bg-ivory px-4 text-sm outline-none transition placeholder:text-espresso/25 focus:border-espresso/40"
+                    className={`h-12 ${inputBase}`}
                   />
                 </label>
 
@@ -566,7 +575,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="City"
-                    className="h-12 w-full rounded-xl border border-border bg-ivory px-4 text-sm outline-none transition placeholder:text-espresso/25 focus:border-espresso/40"
+                    className={`h-12 ${inputBase}`}
                   />
                 </label>
 
@@ -587,7 +596,7 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="State"
-                    className="h-12 w-full rounded-xl border border-border bg-ivory px-4 text-sm outline-none transition placeholder:text-espresso/25 focus:border-espresso/40"
+                    className={`h-12 ${inputBase}`}
                   />
                 </label>
 
@@ -612,28 +621,28 @@ export default function CheckoutPage() {
                       )
                     }
                     placeholder="6-digit pincode"
-                    className="h-12 w-full rounded-xl border border-border bg-ivory px-4 text-sm outline-none transition placeholder:text-espresso/25 focus:border-espresso/40"
+                    className={`h-12 ${inputBase}`}
                   />
                 </label>
               </div>
             </section>
 
-            <section className="rounded-2xl border border-border bg-card p-5 sm:p-7">
+            <section className="rounded-2xl border border-border bg-card p-4 sm:p-5 md:p-7">
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-clay">
                 03 — Payment
               </p>
 
-              <h2 className="mt-2 text-xl font-semibold tracking-tight">
+              <h2 className="mt-2 text-lg font-semibold tracking-tight sm:text-xl">
                 Payment method
               </h2>
 
               <div className="mt-6 rounded-xl border border-espresso bg-espresso p-4 text-ivory">
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-gold">
+                  <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-gold">
                     <div className="h-2 w-2 rounded-full bg-gold" />
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold">
                       Online Payment
                     </p>
@@ -648,7 +657,7 @@ export default function CheckoutPage() {
             </section>
           </div>
 
-          <aside className="h-fit rounded-2xl border border-border bg-card p-6 lg:sticky lg:top-28">
+          <aside className="h-fit rounded-2xl border border-border bg-card p-5 sm:p-6 lg:sticky lg:top-28">
             <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-clay">
               Order Summary
             </p>
@@ -729,18 +738,18 @@ export default function CheckoutPage() {
 
             <div className="my-6 border-t border-border" />
 
-            <div className="flex items-end justify-between">
-              <div>
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-espresso/40">
                   Total
                 </p>
 
-                <p className="mt-1 text-2xl font-bold tracking-tight">
+                <p className="mt-1 break-words text-2xl font-bold tracking-tight">
                   {formatPrice(total)}
                 </p>
               </div>
 
-              <span className="text-[9px] uppercase tracking-[0.15em] text-espresso/35">
+              <span className="shrink-0 text-[9px] uppercase tracking-[0.15em] text-espresso/35">
                 INR
               </span>
             </div>

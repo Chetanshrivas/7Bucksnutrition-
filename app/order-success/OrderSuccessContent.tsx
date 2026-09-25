@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
 import {
   ReceiptPrinter,
@@ -187,6 +187,16 @@ export function OrderSuccessContent() {
   const [stage, setStage] =
     useState<ReceiptPrinterStage>("processing");
 
+  // FIX: coming here from checkout via router.replace() keeps
+  // whatever scroll position the browser already had (checkout
+  // is a long page), so this page could first paint scrolled
+  // down near the footer. Force scroll-to-top synchronously,
+  // before the browser paints, so the receipt printer is what
+  // the user sees immediately — no manual scrolling needed.
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
   useEffect(() => {
     if (authLoading) return;
 
@@ -278,6 +288,15 @@ export function OrderSuccessContent() {
       );
 
       setLoading(false);
+
+      // FIX: once the order data actually lands, the page's
+      // height changes (loading skeleton -> full receipt), which
+      // can itself shift scroll position in some browsers. Snap
+      // back to top again, right after paint, so the printer
+      // animation is guaranteed to be in view from frame one.
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      });
     }
 
     loadOrder();
@@ -306,11 +325,11 @@ export function OrderSuccessContent() {
 
   if (authLoading || loading) {
     return (
-      <main className="min-h-screen bg-ivory px-5 pt-32 text-espresso">
+      <main className="min-h-screen overflow-x-hidden bg-ivory px-5 pt-32 text-espresso">
         <section className="mx-auto flex max-w-xl flex-col items-center text-center">
           <div className="h-16 w-16 animate-pulse rounded-full bg-espresso/10" />
 
-          <div className="mt-7 h-8 w-64 animate-pulse rounded-lg bg-espresso/10" />
+          <div className="mt-7 h-8 w-64 max-w-full animate-pulse rounded-lg bg-espresso/10" />
 
           <div className="mt-4 h-4 w-80 max-w-full animate-pulse rounded bg-espresso/10" />
         </section>
@@ -320,13 +339,13 @@ export function OrderSuccessContent() {
 
   if (!order) {
     return (
-      <main className="min-h-screen bg-ivory px-5 pt-32 text-espresso">
+      <main className="min-h-screen overflow-x-hidden bg-ivory px-5 pt-32 text-espresso">
         <section className="mx-auto flex max-w-xl flex-col items-center text-center">
           <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-clay">
             Seven Bucks Nutrition
           </p>
 
-          <h1 className="mt-5 font-serif text-4xl italic tracking-[-0.04em] sm:text-5xl">
+          <h1 className="mt-5 break-words font-serif text-3xl italic leading-tight tracking-[-0.03em] sm:text-5xl">
             Order not found
           </h1>
 
@@ -334,7 +353,7 @@ export function OrderSuccessContent() {
             We couldn't find this order in your account.
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-8 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <Link
               href="/account/orders"
               className="inline-flex h-12 items-center justify-center rounded-full bg-espresso px-7 text-[10px] font-bold uppercase tracking-[0.18em] text-ivory"
@@ -364,14 +383,14 @@ export function OrderSuccessContent() {
   );
 
   return (
-    <main className="min-h-screen bg-ivory px-5 pb-24 pt-28 text-espresso sm:px-8 sm:pt-36">
+    <main className="min-h-screen overflow-x-hidden bg-ivory px-5 pb-24 pt-24 text-espresso sm:px-8 sm:pt-32">
       <section className="mx-auto max-w-xl">
 
         {/* RECEIPT PRINTER */}
         <ReceiptPrinter.Root
           stage={stage}
           feedMotion="stepped"
-          className="mx-auto"
+          className="mx-auto w-full"
         >
           <ReceiptPrinter.Machine>
             <ReceiptPrinter.Header>
@@ -685,17 +704,17 @@ export function OrderSuccessContent() {
             Your order has been placed successfully. Your receipt is ready above.
           </p>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Link
               href="/account/orders"
-              className="flex h-13 items-center justify-center rounded-xl bg-espresso px-5 py-4 text-[10px] font-bold uppercase tracking-[0.18em] text-ivory transition hover:bg-espresso/90"
+              className="flex h-14 items-center justify-center rounded-xl bg-espresso px-5 py-4 text-[10px] font-bold uppercase tracking-[0.18em] text-ivory transition hover:bg-espresso/90"
             >
               View My Orders
             </Link>
 
             <Link
               href="/account"
-              className="flex h-13 items-center justify-center rounded-xl border border-border bg-white/40 px-5 py-4 text-[10px] font-bold uppercase tracking-[0.18em] text-espresso transition hover:border-espresso/30 hover:bg-white/70"
+              className="flex h-14 items-center justify-center rounded-xl border border-border bg-white/40 px-5 py-4 text-[10px] font-bold uppercase tracking-[0.18em] text-espresso transition hover:border-espresso/30 hover:bg-white/70"
             >
               Go to Account
             </Link>
