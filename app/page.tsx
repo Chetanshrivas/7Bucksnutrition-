@@ -20,7 +20,7 @@ import {
   getBrands,
 } from "../lib/products";
 
-export const revalidate = 120;
+export const revalidate = 3600;
 
 export default async function Home() {
   const products = await getFeaturedProducts(8);

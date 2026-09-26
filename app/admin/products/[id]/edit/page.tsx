@@ -19,6 +19,8 @@ import ProductImages, {
   type ProductImageFormData,
 } from "../../components/ProductImages";
 
+import { revalidateHomepage } from "../../actions";
+
 const INITIAL_PRODUCT: ProductFormData = {
   name: "",
   slug: "",
@@ -1709,6 +1711,27 @@ export default function EditProductPage() {
             `Image save failed: ${insertImagesError.message}`
           );
         }
+      }
+
+      // ---------------------------------------------
+      // REVALIDATE HOMEPAGE
+      // ---------------------------------------------
+      //
+      // Featured/bestseller flags, price, stock, etc. shown on the
+      // homepage need to reflect this change right away — not wait
+      // for the next scheduled ISR refresh. This is a Server Action
+      // (see app/admin/products/actions.ts), safe to call directly
+      // from this client component.
+      try {
+        await revalidateHomepage();
+      } catch (revalidateError) {
+        // Not fatal — the homepage's own `revalidate` window (see
+        // app/page.tsx) is still there as a safety net, so the
+        // change will show up on its own even if this call fails.
+        console.error(
+          "Homepage revalidation failed:",
+          revalidateError
+        );
       }
 
       // ---------------------------------------------
