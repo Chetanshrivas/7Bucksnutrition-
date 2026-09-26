@@ -20,6 +20,8 @@ import {
   getBrands,
 } from "../lib/products";
 
+export const revalidate = 120;
+
 export default async function Home() {
   const products = await getFeaturedProducts(8);
   const brands = await getBrands();
@@ -35,8 +37,6 @@ export default async function Home() {
       <FeaturedProducts products={products} />
 
       <BrandsOrbit brands={brands} />
-
-      
       
 
       <FindYourProtein />

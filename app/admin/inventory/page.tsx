@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
-type InventoryItem = {
+// ---------------------------------------------------------------------------
+// Raw shapes coming back from Supabase
+// ---------------------------------------------------------------------------
+
+type RawInventoryRow = {
   id: string;
   variant_id: string;
   stock_quantity: number;
@@ -31,6 +35,45 @@ type InventoryItem = {
   } | null;
 };
 
+type RawSimpleProduct = {
+  id: string;
+  name: string;
+  sku: string | null;
+  price: number | null;
+  compare_at_price: number | null;
+  stock_quantity: number;
+  is_available: boolean;
+  updated_at: string;
+};
+
+// ---------------------------------------------------------------------------
+// Normalized shape the rest of this page actually renders. A "variant" row
+// comes from the inventory table (product has variants, stock lives per
+// variant). A "simple" row is a product with NO rows in product_variants —
+// that product keeps its own price/sku/stock directly on the products table,
+// so it has no inventory row at all unless we add it in here ourselves.
+// ---------------------------------------------------------------------------
+
+type StockKind = "variant" | "simple";
+
+type InventoryRow = {
+  id: string; // unique key for this page: inventory.id, or `simple:<product.id>`
+  kind: StockKind;
+  variantId: string | null;
+  productId: string;
+  productName: string;
+  variantLabel: string;
+  sku: string | null;
+  imageUrl: string | null;
+  price: number;
+  compareAtPrice: number | null;
+  stockQuantity: number;
+  reservedQuantity: number;
+  lowStockThreshold: number;
+  updatedAt: string;
+  isAvailable: boolean;
+};
+
 type StockStatus = "all" | "in_stock" | "low_stock" | "out_of_stock";
 
 function formatMoney(amount: number) {
@@ -51,29 +94,29 @@ function formatDate(date: string) {
   });
 }
 
-function getAvailableStock(item: InventoryItem) {
+function getAvailableStock(item: InventoryRow) {
   return Math.max(
     0,
-    Number(item.stock_quantity || 0) -
-      Number(item.reserved_quantity || 0)
+    Number(item.stockQuantity || 0) -
+      Number(item.reservedQuantity || 0)
   );
 }
 
-function getStockStatus(item: InventoryItem): StockStatus {
+function getStockStatus(item: InventoryRow): StockStatus {
   const available = getAvailableStock(item);
 
   if (available <= 0) return "out_of_stock";
 
-  if (available <= Number(item.low_stock_threshold || 0)) {
+  if (available <= Number(item.lowStockThreshold || 0)) {
     return "low_stock";
   }
 
   return "in_stock";
 }
 
-function formatVariant(item: InventoryItem) {
-  const variant = item.variant;
-
+function formatVariantLabel(
+  variant: RawInventoryRow["variant"]
+) {
   if (!variant) return "Variant";
 
   const parts = [
@@ -85,6 +128,58 @@ function formatVariant(item: InventoryItem) {
   ].filter(Boolean);
 
   return parts.length > 0 ? parts.join(" • ") : "Default variant";
+}
+
+function normalizeVariantRow(
+  row: RawInventoryRow
+): InventoryRow {
+  const variant = row.variant;
+
+  return {
+    id: row.id,
+    kind: "variant",
+    variantId: variant?.id ?? null,
+    productId: variant?.product_id ?? "",
+    productName:
+      variant?.product?.name || "Unknown Product",
+    variantLabel: formatVariantLabel(variant),
+    sku: variant?.sku ?? null,
+    imageUrl: variant?.image_url ?? null,
+    price: Number(variant?.price || 0),
+    compareAtPrice: variant?.compare_at_price ?? null,
+    stockQuantity: Number(row.stock_quantity || 0),
+    reservedQuantity: Number(row.reserved_quantity || 0),
+    lowStockThreshold: Number(row.low_stock_threshold || 0),
+    updatedAt: row.updated_at,
+    isAvailable: variant?.is_available ?? true,
+  };
+}
+
+function normalizeSimpleProduct(
+  product: RawSimpleProduct
+): InventoryRow {
+  return {
+    id: `simple:${product.id}`,
+    kind: "simple",
+    variantId: null,
+    productId: product.id,
+    productName: product.name || "Unknown Product",
+    // These products don't have variants — this label just makes it
+    // obvious in the list why there's no flavour/size shown.
+    variantLabel: "Standalone product (no variants)",
+    sku: product.sku ?? null,
+    // products table has no image column of its own in this schema.
+    imageUrl: null,
+    price: Number(product.price || 0),
+    compareAtPrice: product.compare_at_price ?? null,
+    stockQuantity: Number(product.stock_quantity || 0),
+    // products has no reserved_quantity / low_stock_threshold columns —
+    // there's simply nothing reserved and no low-stock line for these.
+    reservedQuantity: 0,
+    lowStockThreshold: 0,
+    updatedAt: product.updated_at,
+    isAvailable: product.is_available ?? true,
+  };
 }
 
 function Icon({
@@ -192,7 +287,7 @@ function Icon({
 }
 
 export default function AdminInventoryPage() {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventory, setInventory] = useState<InventoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -201,7 +296,7 @@ export default function AdminInventoryPage() {
     useState<StockStatus>("all");
 
   const [editingItem, setEditingItem] =
-    useState<InventoryItem | null>(null);
+    useState<InventoryRow | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] =
@@ -215,42 +310,121 @@ export default function AdminInventoryPage() {
         setLoading(true);
       }
 
-      const { data, error } = await supabase
-        .from("inventory")
-        .select(`
-          id,
-          variant_id,
-          stock_quantity,
-          reserved_quantity,
-          low_stock_threshold,
-          updated_at,
-          variant:product_variants (
+      // 1. Variant-based stock — unchanged from before.
+      const { data: variantData, error: variantError } =
+        await supabase
+          .from("inventory")
+          .select(`
             id,
-            product_id,
-            sku,
-            flavor,
-            size,
-            servings,
-            price,
-            compare_at_price,
-            barcode,
-            image_url,
-            is_available,
-            product:products (
+            variant_id,
+            stock_quantity,
+            reserved_quantity,
+            low_stock_threshold,
+            updated_at,
+            variant:product_variants (
               id,
-              name
+              product_id,
+              sku,
+              flavor,
+              size,
+              servings,
+              price,
+              compare_at_price,
+              barcode,
+              image_url,
+              is_available,
+              product:products (
+                id,
+                name
+              )
             )
-          )
-        `)
-        .order("updated_at", { ascending: false });
+          `)
+          .order("updated_at", { ascending: false });
 
-      if (error) {
-        console.error("Inventory fetch error:", error);
-        alert(error.message);
+      if (variantError) {
+        console.error(
+          "Inventory fetch error:",
+          variantError
+        );
+        alert(variantError.message);
         return;
       }
 
-      setInventory((data || []) as unknown as InventoryItem[]);
+      // 2. Figure out which products already have variants, so we know
+      //    which products are "standalone" (no variants at all) and
+      //    manage their own stock directly on the products table.
+      const { data: variantLinks, error: linkError } =
+        await supabase
+          .from("product_variants")
+          .select("product_id");
+
+      if (linkError) {
+        console.error(
+          "Product-variant lookup error:",
+          linkError
+        );
+        alert(linkError.message);
+        return;
+      }
+
+      const productIdsWithVariants = new Set(
+        (variantLinks || []).map(
+          (row) => row.product_id as string
+        )
+      );
+
+      // 3. Standalone products: has its own price set, but zero rows in
+      //    product_variants.
+      const { data: simpleProducts, error: simpleError } =
+        await supabase
+          .from("products")
+          .select(
+            `
+              id,
+              name,
+              sku,
+              price,
+              compare_at_price,
+              stock_quantity,
+              is_available,
+              updated_at
+            `
+          )
+          .not("price", "is", null)
+          .order("updated_at", { ascending: false });
+
+      if (simpleError) {
+        console.error(
+          "Standalone product fetch error:",
+          simpleError
+        );
+        alert(simpleError.message);
+        return;
+      }
+
+      const normalizedVariantRows = (
+        (variantData || []) as unknown as RawInventoryRow[]
+      ).map(normalizeVariantRow);
+
+      const normalizedSimpleRows = (
+        (simpleProducts || []) as RawSimpleProduct[]
+      )
+        .filter(
+          (product) =>
+            !productIdsWithVariants.has(product.id)
+        )
+        .map(normalizeSimpleProduct);
+
+      const combined = [
+        ...normalizedVariantRows,
+        ...normalizedSimpleRows,
+      ].sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() -
+          new Date(a.updatedAt).getTime()
+      );
+
+      setInventory(combined);
     } catch (error) {
       console.error("Inventory fetch error:", error);
     } finally {
@@ -264,15 +438,15 @@ export default function AdminInventoryPage() {
   }, []);
 
   async function updateQuickStock(
-    item: InventoryItem,
+    item: InventoryRow,
     amount: number
   ) {
-    const currentStock = Number(item.stock_quantity || 0);
+    const currentStock = Number(item.stockQuantity || 0);
     const nextStock = Math.max(0, currentStock + amount);
 
     if (
       amount < 0 &&
-      nextStock < Number(item.reserved_quantity || 0)
+      nextStock < Number(item.reservedQuantity || 0)
     ) {
       alert(
         "Stock cannot be lower than the currently reserved quantity."
@@ -283,32 +457,61 @@ export default function AdminInventoryPage() {
     try {
       setUpdatingId(item.id);
 
-      const { data, error } = await supabase
-        .from("inventory")
-        .update({
-          stock_quantity: nextStock,
-        })
-        .eq("id", item.id)
-        .select()
-        .single();
+      if (item.kind === "variant") {
+        const { data, error } = await supabase
+          .from("inventory")
+          .update({
+            stock_quantity: nextStock,
+          })
+          .eq("id", item.id)
+          .select()
+          .single();
 
-      if (error) {
-        console.error("Stock update error:", error);
-        alert(error.message);
-        return;
+        if (error) {
+          console.error("Stock update error:", error);
+          alert(error.message);
+          return;
+        }
+
+        setInventory((current) =>
+          current.map((row) =>
+            row.id === item.id
+              ? {
+                  ...row,
+                  stockQuantity: data.stock_quantity,
+                  updatedAt: data.updated_at,
+                }
+              : row
+          )
+        );
+      } else {
+        const { data, error } = await supabase
+          .from("products")
+          .update({
+            stock_quantity: nextStock,
+          })
+          .eq("id", item.productId)
+          .select()
+          .single();
+
+        if (error) {
+          console.error("Stock update error:", error);
+          alert(error.message);
+          return;
+        }
+
+        setInventory((current) =>
+          current.map((row) =>
+            row.id === item.id
+              ? {
+                  ...row,
+                  stockQuantity: data.stock_quantity,
+                  updatedAt: data.updated_at,
+                }
+              : row
+          )
+        );
       }
-
-      setInventory((current) =>
-        current.map((inventoryItem) =>
-          inventoryItem.id === item.id
-            ? {
-                ...inventoryItem,
-                stock_quantity: data.stock_quantity,
-                updated_at: data.updated_at,
-              }
-            : inventoryItem
-        )
-      );
     } finally {
       setUpdatingId(null);
     }
@@ -326,62 +529,101 @@ export default function AdminInventoryPage() {
       return;
     }
 
-    if (data.reserved_quantity < 0) {
-      alert("Reserved quantity cannot be negative.");
-      return;
-    }
-
-    if (data.low_stock_threshold < 0) {
-      alert("Low stock threshold cannot be negative.");
-      return;
-    }
-
-    if (data.reserved_quantity > data.stock_quantity) {
-      alert(
-        "Reserved quantity cannot be greater than stock quantity."
-      );
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      const { data: updated, error } = await supabase
-        .from("inventory")
-        .update({
-          stock_quantity: data.stock_quantity,
-          reserved_quantity: data.reserved_quantity,
-          low_stock_threshold: data.low_stock_threshold,
-        })
-        .eq("id", editingItem.id)
-        .select()
-        .single();
-
-      if (error) {
-        console.error("Inventory update error:", error);
-        alert(error.message);
+    if (editingItem.kind === "variant") {
+      if (data.reserved_quantity < 0) {
+        alert("Reserved quantity cannot be negative.");
         return;
       }
 
-      setInventory((current) =>
-        current.map((item) =>
-          item.id === editingItem.id
-            ? {
-                ...item,
-                stock_quantity: updated.stock_quantity,
-                reserved_quantity:
-                  updated.reserved_quantity,
-                low_stock_threshold:
-                  updated.low_stock_threshold,
-                updated_at: updated.updated_at,
-              }
-            : item
-        )
-      );
+      if (data.low_stock_threshold < 0) {
+        alert("Low stock threshold cannot be negative.");
+        return;
+      }
 
-      setEditingItem(null);
-    } finally {
-      setSaving(false);
+      if (data.reserved_quantity > data.stock_quantity) {
+        alert(
+          "Reserved quantity cannot be greater than stock quantity."
+        );
+        return;
+      }
+
+      try {
+        setSaving(true);
+
+        const { data: updated, error } = await supabase
+          .from("inventory")
+          .update({
+            stock_quantity: data.stock_quantity,
+            reserved_quantity: data.reserved_quantity,
+            low_stock_threshold: data.low_stock_threshold,
+          })
+          .eq("id", editingItem.id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error("Inventory update error:", error);
+          alert(error.message);
+          return;
+        }
+
+        setInventory((current) =>
+          current.map((item) =>
+            item.id === editingItem.id
+              ? {
+                  ...item,
+                  stockQuantity: updated.stock_quantity,
+                  reservedQuantity:
+                    updated.reserved_quantity,
+                  lowStockThreshold:
+                    updated.low_stock_threshold,
+                  updatedAt: updated.updated_at,
+                }
+              : item
+          )
+        );
+
+        setEditingItem(null);
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      // Standalone product — products table only has stock_quantity,
+      // there's no reserved_quantity / low_stock_threshold column to save.
+      try {
+        setSaving(true);
+
+        const { data: updated, error } = await supabase
+          .from("products")
+          .update({
+            stock_quantity: data.stock_quantity,
+          })
+          .eq("id", editingItem.productId)
+          .select()
+          .single();
+
+        if (error) {
+          console.error("Product stock update error:", error);
+          alert(error.message);
+          return;
+        }
+
+        setInventory((current) =>
+          current.map((item) =>
+            item.id === editingItem.id
+              ? {
+                  ...item,
+                  stockQuantity: updated.stock_quantity,
+                  updatedAt: updated.updated_at,
+                }
+              : item
+          )
+        );
+
+        setEditingItem(null);
+      } finally {
+        setSaving(false);
+      }
     }
   }
 
@@ -389,14 +631,10 @@ export default function AdminInventoryPage() {
     const query = search.trim().toLowerCase();
 
     return inventory.filter((item) => {
-      const variant = item.variant;
-
       const searchableText = [
-        variant?.product?.name,
-        variant?.sku,
-        variant?.flavor,
-        variant?.size,
-        variant?.barcode,
+        item.productName,
+        item.sku,
+        item.variantLabel,
       ]
         .filter(Boolean)
         .join(" ")
@@ -418,8 +656,8 @@ export default function AdminInventoryPage() {
     let reservedUnits = 0;
 
     inventory.forEach((item) => {
-      totalUnits += Number(item.stock_quantity || 0);
-      reservedUnits += Number(item.reserved_quantity || 0);
+      totalUnits += Number(item.stockQuantity || 0);
+      reservedUnits += Number(item.reservedQuantity || 0);
     });
 
     return {
@@ -463,7 +701,8 @@ export default function AdminInventoryPage() {
 
               <p className="mt-3 max-w-xl text-xs leading-6 text-white/45 sm:text-sm">
                 Manage stock, reserved units and low-stock
-                thresholds for every product variant.
+                thresholds for every product variant — plus
+                stock for standalone products with no variants.
               </p>
             </div>
 
@@ -596,7 +835,7 @@ export default function AdminInventoryPage() {
 
             <p className="text-[10px] text-black/35">
               {filteredInventory.length} of{" "}
-              {inventory.length} variants
+              {inventory.length} items
             </p>
           </div>
 
@@ -649,12 +888,9 @@ export default function AdminInventoryPage() {
                           <td className="px-5 py-5">
                             <div className="flex items-center gap-3">
                               <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#f3f0e9]">
-                                {item.variant?.image_url ? (
+                                {item.imageUrl ? (
                                   <img
-                                    src={
-                                      item.variant
-                                        .image_url
-                                    }
+                                    src={item.imageUrl}
                                     alt=""
                                     className="h-full w-full object-cover"
                                   />
@@ -667,14 +903,21 @@ export default function AdminInventoryPage() {
                               </div>
 
                               <div className="min-w-0">
-                                <p className="max-w-[250px] truncate text-xs font-semibold">
-                                  {item.variant?.product
-                                    ?.name ||
-                                    "Unknown Product"}
-                                </p>
+                                <div className="flex items-center gap-2">
+                                  <p className="max-w-[220px] truncate text-xs font-semibold">
+                                    {item.productName}
+                                  </p>
+
+                                  {item.kind ===
+                                    "simple" && (
+                                    <span className="shrink-0 rounded-full border border-[#cdb47b]/40 bg-[#cdb47b]/10 px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.08em] text-[#9c8250]">
+                                      No Variants
+                                    </span>
+                                  )}
+                                </div>
 
                                 <p className="mt-1 max-w-[280px] truncate text-[9px] text-black/40">
-                                  {formatVariant(item)}
+                                  {item.variantLabel}
                                 </p>
                               </div>
                             </div>
@@ -682,19 +925,13 @@ export default function AdminInventoryPage() {
 
                           <td className="px-5 py-5">
                             <span className="rounded-lg bg-[#f3f0e9] px-2.5 py-1.5 font-mono text-[8px] font-semibold text-black/55">
-                              {item.variant?.sku ||
-                                "—"}
+                              {item.sku || "—"}
                             </span>
                           </td>
 
                           <td className="px-5 py-5">
                             <p className="text-xs font-bold">
-                              {formatMoney(
-                                Number(
-                                  item.variant?.price ||
-                                    0
-                                )
-                              )}
+                              {formatMoney(item.price)}
                             </p>
                           </td>
 
@@ -711,8 +948,8 @@ export default function AdminInventoryPage() {
                                 disabled={
                                   updatingId ===
                                   item.id ||
-                                  item.stock_quantity <=
-                                    item.reserved_quantity
+                                  item.stockQuantity <=
+                                    item.reservedQuantity
                                 }
                                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-black/10 text-black/45 transition hover:bg-black hover:text-white disabled:opacity-30"
                               >
@@ -723,7 +960,7 @@ export default function AdminInventoryPage() {
                               </button>
 
                               <span className="min-w-[38px] text-center text-sm font-bold">
-                                {item.stock_quantity}
+                                {item.stockQuantity}
                               </span>
 
                               <button
@@ -754,7 +991,9 @@ export default function AdminInventoryPage() {
 
                           <td className="px-5 py-5">
                             <p className="text-xs font-semibold">
-                              {item.reserved_quantity}
+                              {item.kind === "variant"
+                                ? item.reservedQuantity
+                                : "—"}
                             </p>
                           </td>
 
@@ -767,7 +1006,7 @@ export default function AdminInventoryPage() {
                           <td className="px-5 py-5">
                             <p className="text-[9px] text-black/40">
                               {formatDate(
-                                item.updated_at
+                                item.updatedAt
                               )}
                             </p>
                           </td>
@@ -811,11 +1050,9 @@ export default function AdminInventoryPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                           <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#f3f0e9]">
-                            {item.variant?.image_url ? (
+                            {item.imageUrl ? (
                               <img
-                                src={
-                                  item.variant.image_url
-                                }
+                                src={item.imageUrl}
                                 alt=""
                                 className="h-full w-full object-cover"
                               />
@@ -828,19 +1065,24 @@ export default function AdminInventoryPage() {
                           </div>
 
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold">
-                              {item.variant?.product
-                                ?.name ||
-                                "Unknown Product"}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="truncate text-xs font-semibold">
+                                {item.productName}
+                              </p>
+
+                              {item.kind === "simple" && (
+                                <span className="shrink-0 rounded-full border border-[#cdb47b]/40 bg-[#cdb47b]/10 px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.08em] text-[#9c8250]">
+                                  No Variants
+                                </span>
+                              )}
+                            </div>
 
                             <p className="mt-1 truncate text-[9px] text-black/40">
-                              {formatVariant(item)}
+                              {item.variantLabel}
                             </p>
 
                             <p className="mt-1 font-mono text-[8px] text-black/30">
-                              {item.variant?.sku ||
-                                "No SKU"}
+                              {item.sku || "No SKU"}
                             </p>
                           </div>
                         </div>
@@ -852,7 +1094,7 @@ export default function AdminInventoryPage() {
                         <MiniInfo
                           label="Stock"
                           value={String(
-                            item.stock_quantity
+                            item.stockQuantity
                           )}
                         />
 
@@ -863,9 +1105,13 @@ export default function AdminInventoryPage() {
 
                         <MiniInfo
                           label="Reserved"
-                          value={String(
-                            item.reserved_quantity
-                          )}
+                          value={
+                            item.kind === "variant"
+                              ? String(
+                                  item.reservedQuantity
+                                )
+                              : "—"
+                          }
                         />
                       </div>
 
@@ -877,8 +1123,8 @@ export default function AdminInventoryPage() {
                           }
                           disabled={
                             updatingId === item.id ||
-                            item.stock_quantity <=
-                              item.reserved_quantity
+                            item.stockQuantity <=
+                              item.reservedQuantity
                           }
                           className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 disabled:opacity-30"
                         >
@@ -889,7 +1135,7 @@ export default function AdminInventoryPage() {
                         </button>
 
                         <div className="flex h-10 flex-1 items-center justify-center rounded-xl bg-[#faf9f6] text-xs font-bold">
-                          {item.stock_quantity} units
+                          {item.stockQuantity} units
                         </div>
 
                         <button
@@ -1097,7 +1343,7 @@ function EmptyState({
         <p className="mt-2 text-[10px] leading-5 text-black/35">
           {hasInventory
             ? "Try changing your search or stock filter."
-            : "Create inventory records for your product variants to see them here."}
+            : "Create inventory records for your product variants — or add a standalone product with a price — to see them here."}
         </p>
       </div>
     </div>
@@ -1110,7 +1356,7 @@ function EditInventoryModal({
   onClose,
   onSave,
 }: {
-  item: InventoryItem;
+  item: InventoryRow;
   saving: boolean;
   onClose: () => void;
   onSave: (data: {
@@ -1119,20 +1365,24 @@ function EditInventoryModal({
     low_stock_threshold: number;
   }) => void;
 }) {
+  const isSimple = item.kind === "simple";
+
   const [stock, setStock] = useState(
-    String(item.stock_quantity)
+    String(item.stockQuantity)
   );
 
   const [reserved, setReserved] = useState(
-    String(item.reserved_quantity)
+    String(item.reservedQuantity)
   );
 
   const [threshold, setThreshold] = useState(
-    String(item.low_stock_threshold)
+    String(item.lowStockThreshold)
   );
 
   const stockNumber = Number(stock || 0);
-  const reservedNumber = Number(reserved || 0);
+  const reservedNumber = isSimple
+    ? 0
+    : Number(reserved || 0);
 
   const available = Math.max(
     0,
@@ -1142,7 +1392,7 @@ function EditInventoryModal({
   const status =
     available <= 0
       ? "out_of_stock"
-      : available <= Number(threshold || 0)
+      : !isSimple && available <= Number(threshold || 0)
       ? "low_stock"
       : "in_stock";
 
@@ -1151,8 +1401,12 @@ function EditInventoryModal({
 
     onSave({
       stock_quantity: Number(stock || 0),
-      reserved_quantity: Number(reserved || 0),
-      low_stock_threshold: Number(threshold || 0),
+      reserved_quantity: isSimple
+        ? 0
+        : Number(reserved || 0),
+      low_stock_threshold: isSimple
+        ? 0
+        : Number(threshold || 0),
     });
   }
 
@@ -1177,16 +1431,15 @@ function EditInventoryModal({
             </p>
 
             <h2 className="mt-1.5 truncate text-lg font-semibold tracking-[-0.04em]">
-              {item.variant?.product?.name ||
-                "Product"}
+              {item.productName}
             </h2>
 
             <p className="mt-1 truncate text-[9px] text-black/40">
-              {formatVariant(item)}
+              {item.variantLabel}
             </p>
 
             <p className="mt-1 font-mono text-[8px] text-black/30">
-              {item.variant?.sku}
+              {item.sku}
             </p>
           </div>
 
@@ -1219,16 +1472,22 @@ function EditInventoryModal({
               />
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-2">
+            <div
+              className={`mt-4 grid gap-2 ${
+                isSimple ? "grid-cols-2" : "grid-cols-3"
+              }`}
+            >
               <MiniInfo
                 label="Stock"
                 value={String(stockNumber)}
               />
 
-              <MiniInfo
-                label="Reserved"
-                value={String(reservedNumber)}
-              />
+              {!isSimple && (
+                <MiniInfo
+                  label="Reserved"
+                  value={String(reservedNumber)}
+                />
+              )}
 
               <MiniInfo
                 label="Available"
@@ -1246,22 +1505,33 @@ function EditInventoryModal({
               min={0}
             />
 
-            <NumberField
-              label="Reserved Quantity"
-              value={reserved}
-              onChange={setReserved}
-              min={0}
-            />
+            {isSimple ? (
+              <p className="rounded-2xl border border-black/[0.07] bg-white p-3 text-[9px] leading-5 text-black/40">
+                This product has no variants, so it doesn't
+                track reserved units or a low-stock
+                threshold separately — only its stock
+                quantity is stored.
+              </p>
+            ) : (
+              <>
+                <NumberField
+                  label="Reserved Quantity"
+                  value={reserved}
+                  onChange={setReserved}
+                  min={0}
+                />
 
-            <NumberField
-              label="Low Stock Threshold"
-              value={threshold}
-              onChange={setThreshold}
-              min={0}
-            />
+                <NumberField
+                  label="Low Stock Threshold"
+                  value={threshold}
+                  onChange={setThreshold}
+                  min={0}
+                />
+              </>
+            )}
           </div>
 
-          {reservedNumber > stockNumber && (
+          {!isSimple && reservedNumber > stockNumber && (
             <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-[9px] leading-5 text-red-600">
               Reserved quantity cannot be greater than
               stock quantity.
@@ -1284,7 +1554,7 @@ function EditInventoryModal({
             type="submit"
             disabled={
               saving ||
-              reservedNumber > stockNumber
+              (!isSimple && reservedNumber > stockNumber)
             }
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#171512] px-5 text-[9px] font-bold uppercase tracking-[0.12em] text-white hover:bg-black disabled:opacity-40"
           >

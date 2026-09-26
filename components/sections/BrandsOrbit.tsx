@@ -44,6 +44,22 @@ export function BrandsOrbit({
   const isPausedRef =
     useRef(false);
 
+  // Momentum/inertia state: since the track now handles touch drag
+  // entirely itself (touch-action: none), the browser's native
+  // "flick and glide to a stop" no longer happens automatically —
+  // these refs let us recreate that same smooth deceleration by hand.
+  const velocityRef =
+    useRef(0);
+
+  const lastPointerXRef =
+    useRef(0);
+
+  const lastPointerTimeRef =
+    useRef(0);
+
+  const momentumVelocityRef =
+    useRef(0);
+
   const hasBrands = brands.length > 0;
 
   const loopBrands = hasBrands
@@ -63,6 +79,19 @@ export function BrandsOrbit({
       ) {
         track.scrollLeft -=
           singleSetWidth;
+
+        // FIX: if a wrap happens *while the user is actively
+        // dragging*, the drag's "start scroll" reference also
+        // needs to shift by the same amount — otherwise the very
+        // next onPointerMove computes scrollLeft from a now-stale
+        // reference and the carousel visibly jumps. This only
+        // triggers when a drag happens to cross the loop boundary,
+        // which is why the glitch felt random ("kabhi hota hai
+        // kabhi nahi").
+        if (isDragging.current) {
+          dragStartScroll.current -=
+            singleSetWidth;
+        }
       }
 
       if (
@@ -70,6 +99,11 @@ export function BrandsOrbit({
       ) {
         track.scrollLeft +=
           singleSetWidth;
+
+        if (isDragging.current) {
+          dragStartScroll.current +=
+            singleSetWidth;
+        }
       }
     },
     []
@@ -96,13 +130,41 @@ export function BrandsOrbit({
     }
 
     const animate = () => {
-      if (
-        !isPausedRef.current &&
-        !isDragging.current
+      if (isDragging.current) {
+        // Finger is actively down — onPointerMove is driving
+        // scrollLeft directly, this loop should not touch it.
+      } else if (
+        Math.abs(
+          momentumVelocityRef.current
+        ) > 0.02
       ) {
-        track.scrollLeft += speed;
+        // Gliding to a stop after a flick, like native momentum
+        // scrolling would.
+        track.scrollLeft +=
+          momentumVelocityRef.current *
+          16;
+
+        momentumVelocityRef.current *=
+          0.94;
 
         normalizeScroll(track);
+      } else {
+        if (
+          momentumVelocityRef.current !==
+          0
+        ) {
+          // Momentum just settled to a stop — hand back to the
+          // regular marquee after the usual short pause.
+          momentumVelocityRef.current = 0;
+
+          pauseThenResume();
+        }
+
+        if (!isPausedRef.current) {
+          track.scrollLeft += speed;
+
+          normalizeScroll(track);
+        }
       }
 
       rafRef.current =
@@ -166,12 +228,14 @@ export function BrandsOrbit({
 
     if (!track) return;
 
-    const target =
-      e.target as HTMLElement;
-
-    if (target.closest("a")) {
-      return;
-    }
+    // NOTE: we deliberately do NOT exclude drags that start on
+    // top of a brand link/image here. A tap that never moves still
+    // navigates normally (hasMoved stays false), while a real drag
+    // — even one that starts right on an image — gets caught by
+    // handleBrandClick below and has its click suppressed. Bailing
+    // out early for links here was the reason scroll only worked
+    // from the empty gaps between logos and not from the logos
+    // themselves.
 
     isDragging.current = true;
     hasMoved.current = false;
@@ -181,6 +245,15 @@ export function BrandsOrbit({
 
     dragStartScroll.current =
       track.scrollLeft;
+
+    // Cancel any momentum that was still gliding, and start
+    // tracking velocity fresh for this new drag.
+    momentumVelocityRef.current = 0;
+    velocityRef.current = 0;
+    lastPointerXRef.current =
+      e.clientX;
+    lastPointerTimeRef.current =
+      performance.now();
 
     isPausedRef.current = true;
 
@@ -217,6 +290,29 @@ export function BrandsOrbit({
       distance;
 
     normalizeScroll(track);
+
+    // Sample instantaneous velocity (px scrolled per ms) and
+    // low-pass filter it against the running value, so a single
+    // jittery frame right before release doesn't cause a weird
+    // flick. Sign is flipped because moving the finger right
+    // (positive dx) decreases scrollLeft.
+    const now = performance.now();
+    const dt =
+      now - lastPointerTimeRef.current ||
+      16;
+    const dx =
+      e.clientX -
+      lastPointerXRef.current;
+    const instantVelocity =
+      -dx / dt;
+
+    velocityRef.current =
+      velocityRef.current * 0.7 +
+      instantVelocity * 0.3;
+
+    lastPointerXRef.current =
+      e.clientX;
+    lastPointerTimeRef.current = now;
   };
 
   const onPointerUp = (
@@ -247,7 +343,19 @@ export function BrandsOrbit({
       }
     } catch {}
 
-    pauseThenResume();
+    // Fast flick → glide to a stop under momentum (the RAF loop
+    // in the effect above takes it from here and calls
+    // pauseThenResume itself once it settles). Slow/no flick →
+    // just pause-then-resume like before, no glide needed.
+    if (
+      Math.abs(velocityRef.current) >
+      0.03
+    ) {
+      momentumVelocityRef.current =
+        velocityRef.current;
+    } else {
+      pauseThenResume();
+    }
 
     setTimeout(() => {
       hasMoved.current = false;
@@ -277,6 +385,9 @@ export function BrandsOrbit({
         );
       }
     } catch {}
+
+    velocityRef.current = 0;
+    momentumVelocityRef.current = 0;
 
     pauseThenResume();
 
@@ -369,7 +480,15 @@ export function BrandsOrbit({
           style={{
             WebkitOverflowScrolling:
               "touch",
-            touchAction: "pan-y",
+            // FIX: "pan-y" told mobile browsers to keep handling
+            // horizontal gestures themselves, which made them treat a
+            // sideways thumb-drag as ambiguous and cancel it before our
+            // onPointerMove could take over — so drag worked with a
+            // mouse (desktop) but not with a thumb (mobile). "none"
+            // hands full control of the gesture to our pointer-event
+            // handlers above, on both mouse and touch, so thumb-drag
+            // now behaves exactly like the mouse-drag already did.
+            touchAction: "none",
           }}
         >
           {loopBrands.map(
