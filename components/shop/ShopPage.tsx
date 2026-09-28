@@ -386,6 +386,12 @@ function ShopPageContent() {
 
   /* =========================================================
      LOAD PRODUCTS
+
+     Server-side pagination: getProductsPage() asks Supabase for
+     only PAGE_SIZE rows via .range(from, to) — it never fetches
+     the whole catalog. Changing `currentPage` triggers a fresh,
+     small fetch for just that page, so exactly PAGE_SIZE products
+     load at a time.
   ========================================================= */
 
   useEffect(() => {
@@ -764,8 +770,8 @@ function ShopPageContent() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#f5f2eb] text-[#171512]">
-        <section className="border-b border-black/[0.08] px-5 pb-8 pt-36 sm:px-8 sm:pb-10 lg:px-12 lg:pt-40">
+      <main className="min-h-screen overflow-x-hidden bg-[#f5f2eb] text-[#171512]">
+        <section className="border-b border-black/[0.08] px-5 pb-6 pt-28 sm:px-8 sm:pb-10 sm:pt-36 lg:px-12 lg:pt-40">
           <div className="mx-auto max-w-[1440px]">
             <div className="mb-3 inline-flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[#a27d37]" />
@@ -775,7 +781,7 @@ function ShopPageContent() {
               </p>
             </div>
 
-            <h1 className="max-w-[850px] text-[clamp(52px,7vw,96px)] font-semibold leading-[0.9] tracking-[-0.065em]">
+            <h1 className="max-w-[850px] text-[clamp(40px,8vw,96px)] font-semibold leading-[0.95] tracking-[-0.055em] sm:leading-[0.9] sm:tracking-[-0.065em]">
               Shop
               <span className="ml-3 font-serif italic text-[#a27d37]">
                 Performance.
@@ -800,16 +806,16 @@ function ShopPageContent() {
   ========================================================= */
 
   return (
-    <main className="min-h-screen bg-[#f5f2eb] text-[#171512]">
+    <main className="min-h-screen overflow-x-hidden bg-[#f5f2eb] text-[#171512]">
 
       {/* =====================================================
           HEADER
       ===================================================== */}
 
-      <section className="border-b border-black/[0.08] px-5 pb-8 pt-36 sm:px-8 sm:pb-10 lg:px-12 lg:pt-40">
+      <section className="border-b border-black/[0.08] px-5 pb-6 pt-28 sm:px-8 sm:pb-10 sm:pt-36 lg:px-12 lg:pt-40">
         <div className="mx-auto max-w-[1440px]">
 
-          <div className="mb-8 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-black/35">
+          <div className="mb-5 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-black/35 sm:mb-8">
             <Link
               href="/"
               className="transition-colors hover:text-black"
@@ -844,7 +850,7 @@ function ShopPageContent() {
             )}
           </div>
 
-          <div className="grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end lg:gap-10">
 
             <div>
               <div className="mb-3 inline-flex items-center gap-2">
@@ -855,21 +861,28 @@ function ShopPageContent() {
                 </p>
               </div>
 
-              <h1 className="max-w-[850px] text-[clamp(52px,7vw,96px)] font-semibold leading-[0.9] tracking-[-0.065em]">
+              <h1 className="max-w-[850px] text-[clamp(40px,8vw,96px)] font-semibold leading-[0.95] tracking-[-0.055em] sm:leading-[0.9] sm:tracking-[-0.065em]">
                 Shop
                 <span className="ml-3 font-serif italic text-[#a27d37]">
                   Performance.
                 </span>
               </h1>
 
-              <p className="mt-6 max-w-[560px] text-[13px] leading-6 text-black/50">
+              {/* Description: hidden on the smallest screens so the
+                  filter bar and products come into view sooner —
+                  still shown from sm: up. */}
+              <p className="mt-4 hidden max-w-[560px] text-[13px] leading-6 text-black/50 sm:block sm:mt-6">
                 Every product here earns its place on the shelf —
                 dosed the way the research says, verified before it
                 ships.
               </p>
             </div>
 
-            <div className="flex items-end gap-7 lg:pb-1">
+            {/* Collection / Products quick-stats: desktop only — the
+                "Showing N" line near the product grid already covers
+                this on mobile, so repeating it up here just adds
+                scroll before anyone sees a filter or a product. */}
+            <div className="hidden items-end gap-7 lg:flex lg:pb-1">
 
               <div>
                 <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-black/30">
@@ -1242,110 +1255,108 @@ function ShopPageContent() {
 
           </div>
 
-          {/* MOBILE */}
+          {/* MOBILE — compact: search full-width, then a single
+              horizontal-scroll row of filter chips (Category / Brand /
+              Sort) instead of two stacked rows of big boxes. */}
 
-          <div className="py-3 md:hidden">
+          <div className="py-2.5 md:hidden">
 
-            <div className="grid grid-cols-2 gap-2">
+            {/* SEARCH */}
 
-              {/* CATEGORY */}
+            <div className="flex h-11 min-w-0 items-center rounded-full border border-black/10 bg-white/60 px-4 shadow-sm">
 
-              <button
-                type="button"
-                onClick={() =>
-                  setMobileCategoryOpen(
-                    (open) => !open
+              <span className="mr-2 shrink-0 text-black/30">
+                <SearchIcon />
+              </span>
+
+              <input
+                type="search"
+                value={search}
+                onChange={(event) =>
+                  changeSearch(
+                    event.target.value
                   )
                 }
-                className="flex h-12 min-w-0 items-center justify-between rounded-2xl border border-black/10 bg-white/60 px-4 text-left shadow-sm transition active:scale-[0.98]"
-              >
-                <div className="min-w-0">
-                  <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-black/30">
-                    Category
-                  </p>
+                placeholder="Search products..."
+                className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-black/25"
+                aria-label="Search products"
+              />
 
-                  <p className="mt-0.5 truncate text-[11px] font-semibold">
-                    {selectedLabel}
-                  </p>
-                </div>
+              {search && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    changeSearch("")
+                  }
+                  className="ml-2 shrink-0 text-lg leading-none text-black/30"
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              )}
+
+            </div>
+
+            {/* FILTER CHIPS */}
+
+            <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+
+              {/* CATEGORY CHIP */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileBrandOpen(false);
+                  setMobileCategoryOpen(
+                    (open) => !open
+                  );
+                }}
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[9px] font-bold uppercase tracking-[0.08em] shadow-sm transition active:scale-[0.97] ${
+                  hasActiveCategory
+                    ? "border-[#171512] bg-[#171512] text-white"
+                    : "border-black/10 bg-white/70 text-black/60"
+                }`}
+              >
+                <span className="max-w-[92px] truncate">
+                  {selectedLabel}
+                </span>
 
                 <ChevronDown
                   open={mobileCategoryOpen}
                 />
               </button>
 
-              {/* BRAND */}
-
+              {/* BRAND CHIP */}
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  setMobileCategoryOpen(false);
                   setMobileBrandOpen(
                     (open) => !open
-                  )
-                }
-                className={`flex h-12 min-w-0 items-center justify-between rounded-2xl border px-4 text-left shadow-sm transition active:scale-[0.98] ${
+                  );
+                }}
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[9px] font-bold uppercase tracking-[0.08em] shadow-sm transition active:scale-[0.97] ${
                   selectedBrandIds.length > 0
-                    ? "border-[#a27d37]/40 bg-[#a27d37]/10"
-                    : "border-black/10 bg-white/60"
+                    ? "border-[#a27d37]/40 bg-[#a27d37]/10 text-[#8b692d]"
+                    : "border-black/10 bg-white/70 text-black/60"
                 }`}
               >
-                <div className="min-w-0">
-                  <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-black/30">
-                    Brand
-                  </p>
+                <span className="max-w-[92px] truncate">
+                  {selectedBrandLabel}
+                </span>
 
-                  <p className="mt-0.5 truncate text-[11px] font-semibold">
-                    {selectedBrandLabel}
-                  </p>
-                </div>
+                {selectedBrandIds.length > 0 && (
+                  <span className="flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[#a27d37] px-1 text-[7px] text-white">
+                    {selectedBrandIds.length}
+                  </span>
+                )}
 
                 <ChevronDown
                   open={mobileBrandOpen}
                 />
               </button>
 
-            </div>
-
-            {/* SEARCH + SORT */}
-
-            <div className="mt-2 flex gap-2">
-
-              <div className="flex h-11 min-w-0 flex-1 items-center rounded-2xl border border-black/10 bg-white/50 px-3.5 shadow-sm">
-
-                <span className="mr-2 text-black/30">
-                  <SearchIcon />
-                </span>
-
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) =>
-                    changeSearch(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Search products..."
-                  className="min-w-0 flex-1 bg-transparent text-[11px] outline-none placeholder:text-black/25"
-                  aria-label="Search products"
-                />
-
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      changeSearch("")
-                    }
-                    className="ml-2 text-lg leading-none text-black/30"
-                    aria-label="Clear search"
-                  >
-                    ×
-                  </button>
-                )}
-
-              </div>
-
-              <div className="relative w-[112px] shrink-0">
-
+              {/* SORT CHIP */}
+              <div className="relative shrink-0">
                 <select
                   value={sortBy}
                   onChange={(event) =>
@@ -1354,7 +1365,7 @@ function ShopPageContent() {
                         .value as SortOption
                     )
                   }
-                  className="h-11 w-full appearance-none rounded-2xl border border-black/10 bg-white/60 pl-3 pr-6 text-[8px] font-bold uppercase tracking-[0.08em] shadow-sm outline-none"
+                  className="h-9 appearance-none rounded-full border border-black/10 bg-white/70 py-0 pl-3.5 pr-7 text-[9px] font-bold uppercase tracking-[0.08em] shadow-sm outline-none"
                   aria-label="Sort products"
                 >
                   <option value="featured">
@@ -1377,8 +1388,8 @@ function ShopPageContent() {
                 <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-black/30">
                   <ChevronDown open={false} />
                 </span>
-
               </div>
+
             </div>
 
             {/* MOBILE CATEGORY MENU */}
@@ -1818,7 +1829,7 @@ function ShopPageContent() {
                     Page {currentPage} of {totalPages}
                   </p>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex max-w-full items-center gap-1.5 overflow-x-auto px-1 scrollbar-none">
 
                     <button
                       type="button"
@@ -1835,7 +1846,7 @@ function ShopPageContent() {
                         currentPage === 1 ||
                         pageLoading
                       }
-                      className="flex h-9 min-w-9 items-center justify-center rounded-full border border-black/10 bg-white/40 px-3 text-[9px] font-bold transition hover:border-black hover:bg-white disabled:pointer-events-none disabled:opacity-25"
+                      className="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white/40 px-3 text-[9px] font-bold transition hover:border-black hover:bg-white disabled:pointer-events-none disabled:opacity-25"
                       aria-label="Previous page"
                     >
                       ←
@@ -1856,7 +1867,7 @@ function ShopPageContent() {
                             disabled={
                               pageLoading
                             }
-                            className={`flex h-9 min-w-9 items-center justify-center rounded-full border px-3 text-[9px] font-bold transition ${
+                            className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full border px-3 text-[9px] font-bold transition ${
                               currentPage ===
                               item
                                 ? "border-[#171512] bg-[#171512] text-white shadow-[0_6px_16px_rgba(23,21,18,0.25)]"
@@ -1868,7 +1879,7 @@ function ShopPageContent() {
                         ) : (
                           <span
                             key={item}
-                            className="flex h-9 min-w-7 items-center justify-center text-[9px] text-black/30"
+                            className="flex h-9 min-w-7 shrink-0 items-center justify-center text-[9px] text-black/30"
                           >
                             …
                           </span>
@@ -1891,7 +1902,7 @@ function ShopPageContent() {
                           totalPages ||
                         pageLoading
                       }
-                      className="flex h-9 min-w-9 items-center justify-center rounded-full border border-black/10 bg-white/40 px-3 text-[9px] font-bold transition hover:border-black hover:bg-white disabled:pointer-events-none disabled:opacity-25"
+                      className="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white/40 px-3 text-[9px] font-bold transition hover:border-black hover:bg-white disabled:pointer-events-none disabled:opacity-25"
                       aria-label="Next page"
                     >
                       →
@@ -1935,11 +1946,6 @@ function ShopPageContent() {
   );
 }
 
-/* =========================================================
-   EXPORTED WRAPPER — Suspense boundary for useSearchParams()
-   fixes: "useSearchParams() should be wrapped in a suspense
-   boundary" build error on Vercel.
-========================================================= */
 
 export default function ShopPage() {
   return (
