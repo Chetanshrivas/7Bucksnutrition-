@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import Razorpay from "razorpay";
 import crypto from "crypto";
+import { sendOrderConfirmationEmails } from "../../../../lib/email";
 
 export const runtime = "nodejs";
 
@@ -1186,12 +1187,130 @@ export async function POST(request: Request) {
         ? finalizedOrder[0]
         : finalizedOrder;
 
+    /*
+     * -------------------------------------------------------
+     * 12.1 SEND ORDER CONFIRMATION EMAILS
+     * -------------------------------------------------------
+     *
+     * Email failure must NEVER turn a successful paid order
+     * into a failed payment response. The order is already
+     * finalized atomically by the database RPC above.
+     * -------------------------------------------------------
+     */
+
+    const alreadyProcessed =
+      result?.already_processed ??
+      false;
+
+    if (
+      !alreadyProcessed &&
+      result?.order_id
+    ) {
+      try {
+        const invoiceItems =
+          serverItems.map((item) => ({
+            product_name:
+              item.productName,
+
+            brand_name:
+              item.brandName ??
+              null,
+
+            sku:
+              item.sku ??
+              null,
+
+            flavor:
+              item.flavor ??
+              null,
+
+            size:
+              item.size ??
+              null,
+
+            servings:
+              item.servings ??
+              null,
+
+            unit_price:
+              Number(item.price),
+
+            quantity:
+              Number(item.quantity),
+
+            total_price:
+              Number(item.price) *
+              Number(item.quantity),
+          }));
+
+        await sendOrderConfirmationEmails(
+          {
+            id:
+              result.order_id,
+
+            order_number:
+              result.order_number ??
+              "",
+
+            order_status:
+              "confirmed",
+
+            customer_name:
+              shippingAddress.fullName,
+
+            customer_email:
+              shippingAddress.email,
+
+            customer_phone:
+              shippingAddress.phone,
+
+            shipping_address:
+              shippingAddress,
+
+            subtotal,
+
+            shipping_fee:
+              shippingFee,
+
+            discount_amount:
+              0,
+
+            total_amount:
+              totalAmount,
+
+            currency:
+              "INR",
+
+            payment_method:
+              "online",
+
+            payment_status:
+              "paid",
+
+            razorpay_payment_id:
+              razorpayPaymentId,
+
+            placed_at:
+              new Date().toISOString(),
+
+            created_at:
+              new Date().toISOString(),
+          },
+          invoiceItems,
+        );
+      } catch (emailError) {
+        console.error(
+          "Order confirmation email failed. Order remains successful:",
+          emailError,
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
 
       already_processed:
-        result?.already_processed ??
-        false,
+        alreadyProcessed,
 
       order_id:
         result?.order_id ??

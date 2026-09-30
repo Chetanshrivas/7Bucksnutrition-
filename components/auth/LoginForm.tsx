@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { supabase } from "../../lib/supabase";
+import { getCurrentAppOrigin } from "../../lib/auth-url-helper";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -14,7 +15,67 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState("");
+
+  async function handleForgotPassword() {
+    setError("");
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      setError("Enter your email address first.");
+      return;
+    }
+
+    if (resetLoading || loading) return;
+
+    setResetLoading(true);
+
+    try {
+      const redirectTo =
+        `${getCurrentAppOrigin()}/reset-password`;
+
+      const { error: resetError } =
+        await supabase.auth.resetPasswordForEmail(
+          cleanEmail,
+          {
+            redirectTo,
+          }
+        );
+
+      if (resetError) {
+        console.error(
+          "Password reset error:",
+          resetError
+        );
+
+        setError(
+          resetError.message ||
+          "Unable to send the password reset email. Please try again."
+        );
+
+        return;
+      }
+
+      toast.success(
+        "Password reset email sent. Please check your inbox."
+      );
+    } catch (error) {
+      console.error(
+        "Forgot password error:",
+        error
+      );
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to send the password reset email. Please try again."
+      );
+    } finally {
+      setResetLoading(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -267,12 +328,11 @@ export default function LoginForm() {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() =>
-                  setError("Password reset will be connected next.")
-                }
+                onClick={handleForgotPassword}
+                disabled={resetLoading || loading}
                 className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#d9b06a] transition hover:text-[#f0c98a]"
               >
-                Forgot password?
+                {resetLoading ? "Sending..." : "Forgot password?"}
               </button>
             </div>
 

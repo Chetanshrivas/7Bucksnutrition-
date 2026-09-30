@@ -462,6 +462,10 @@ export default function AdminOrdersPage() {
     orderId: string,
     newStatus: string
   ) {
+    const existingOrder = orders.find(
+      (order) => order.id === orderId
+    );
+
     try {
       setUpdatingId(orderId);
 
@@ -514,6 +518,73 @@ export default function AdminOrdersPage() {
             }
           : current
       );
+
+      /*
+       * Send the customer status email only when the status
+       * actually changed. The database update above remains
+       * successful even if the email service fails.
+       */
+      if (
+        existingOrder &&
+        existingOrder.order_status !== newStatus
+      ) {
+        try {
+          const {
+            data: sessionData,
+          } = await supabase.auth.getSession();
+
+          const accessToken =
+            sessionData.session?.access_token;
+
+          if (!accessToken) {
+            throw new Error(
+              "Admin session expired. Please sign in again."
+            );
+          }
+
+          const emailResponse = await fetch(
+            "/api/orders/status",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                orderId,
+                newStatus,
+              }),
+            }
+          );
+
+          const emailResult =
+            await emailResponse.json().catch(() => null);
+
+          if (!emailResponse.ok || !emailResult?.success) {
+            throw new Error(
+              emailResult?.error ||
+                "Order status email could not be sent."
+            );
+          }
+
+          showSuccess(
+            `Order #${data.order_number} updated and customer notified.`
+          );
+        } catch (emailError) {
+          console.error(
+            "Order status email failed. Status update remains successful:",
+            emailError
+          );
+
+          showSuccess(
+            `Order #${data.order_number} updated, but email could not be sent.`
+          );
+        }
+      } else {
+        showSuccess(
+          `Order #${data.order_number} updated successfully.`
+        );
+      }
     } finally {
       setUpdatingId(null);
     }
