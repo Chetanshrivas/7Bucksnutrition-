@@ -63,6 +63,24 @@ export default function ResetPasswordPage() {
     };
   }, []);
 
+  const handleLeaveReset = async (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    destination: string,
+  ) => {
+    event.preventDefault();
+
+    try {
+      // A password-recovery link creates a temporary auth session.
+      // If the user leaves without changing the password, clear that
+      // recovery session so the website does not treat them as signed in.
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (error) {
+      console.error("Leaving password reset flow failed:", error);
+    } finally {
+      router.replace(destination);
+    }
+  };
+
   const handleUpdatePassword = async (
     event: FormEvent<HTMLFormElement>,
   ) => {
@@ -177,6 +195,7 @@ export default function ResetPasswordPage() {
 
         <Link
           href="/"
+          onClick={(event) => void handleLeaveReset(event, "/")}
           className="group absolute left-5 top-5 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[9px] font-bold uppercase tracking-[0.16em] text-white/45 shadow-[0_4px_12px_rgba(0,0,0,0.25)] backdrop-blur-sm transition hover:border-[#a27d37]/40 hover:bg-white/[0.06] hover:text-[#e8b56b] sm:left-8 sm:top-8"
         >
           <span className="transition-transform duration-300 group-hover:-translate-x-0.5">
@@ -247,6 +266,7 @@ export default function ResetPasswordPage() {
 
               <Link
                 href="/login"
+                onClick={(event) => void handleLeaveReset(event, "/login")}
                 className="mt-4 flex h-12 w-full items-center justify-center rounded-lg bg-gradient-to-b from-[#e8b56b] to-[#a27d37] text-[10px] font-bold uppercase tracking-[0.2em] text-[#171009] shadow-[0_8px_20px_rgba(0,0,0,0.3)] transition hover:-translate-y-0.5 hover:brightness-105"
               >
                 Back to Sign In
@@ -285,6 +305,7 @@ export default function ResetPasswordPage() {
 
       <Link
         href="/"
+        onClick={(event) => void handleLeaveReset(event, "/")}
         className="group absolute left-5 top-5 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[9px] font-bold uppercase tracking-[0.16em] text-white/45 shadow-[0_4px_12px_rgba(0,0,0,0.25)] backdrop-blur-sm transition hover:border-[#a27d37]/40 hover:bg-white/[0.06] hover:text-[#e8b56b] sm:left-8 sm:top-8"
       >
         <span className="transition-transform duration-300 group-hover:-translate-x-0.5">←</span>
@@ -400,6 +421,7 @@ export default function ResetPasswordPage() {
           <div className="border-t border-white/[0.06] bg-black/10 px-6 py-4 text-center">
             <Link
               href="/login"
+              onClick={(event) => void handleLeaveReset(event, "/login")}
               className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#d9b06a] transition hover:text-white"
             >
               ← Back to Sign In

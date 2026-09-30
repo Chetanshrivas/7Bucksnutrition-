@@ -21,7 +21,9 @@ export function StorefrontShell({
     pathname === "/login" ||
     pathname.startsWith("/login/") ||
     pathname === "/register" ||
-    pathname.startsWith("/register/");
+    pathname.startsWith("/register/") ||
+    pathname === "/reset-password" ||
+    pathname.startsWith("/reset-password/");
 
   if (isAdminRoute || isAuthRoute) {
     return <>{children}</>;
