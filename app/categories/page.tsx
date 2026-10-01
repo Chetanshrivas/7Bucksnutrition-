@@ -2,7 +2,7 @@ import CategoriesPage from "../../components/category/CategoriesPage";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Categories | Your Brand",
+  title: "Categories ",
   description:
     "Explore all product categories and find the right products for your needs.",
 };

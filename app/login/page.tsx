@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import LoginForm from "../../components/auth/LoginForm";
 
 export const metadata: Metadata = {
-  title: "Sign In | Seven Bucks Nutrition",
+  title: "Sign In ",
   description:
     "Sign in to your Seven Bucks Nutrition account.",
 };

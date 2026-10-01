@@ -36,8 +36,8 @@ export const metadata: Metadata = {
 
   title: {
     default:
-      "Seven Bucks Nutrition — Lab-Tested Supplements for Serious Lifters",
-    template: "%s | Seven Bucks Nutrition",
+      "7BucksNutrition — Lab-Tested Supplements for Serious Lifters",
+    template: "%s | 7BucksNutrition",
   },
 
   description:
@@ -50,6 +50,7 @@ export const metadata: Metadata = {
     "creatine",
     "pre-workout",
     "Seven Bucks Nutrition",
+    "7BucksNutrition",
   ],
 
   icons: {

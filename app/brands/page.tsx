@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import BrandsPage from "../../components/brands/BrandsPage";
 
 export const metadata: Metadata = {
-  title: "Brands | Seven Bucks Nutrition",
+  title: "Brands ",
   description:
     "Explore trusted nutrition and supplement brands available at Seven Bucks Nutrition.",
 };

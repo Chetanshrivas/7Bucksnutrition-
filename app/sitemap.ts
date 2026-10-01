@@ -43,6 +43,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly",
       priority: 0.5,
     },
+    {
+      url: `${SITE_URL}/contact`,
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+    {
+      url: `${SITE_URL}/privacy-policy`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${SITE_URL}/terms-and-conditions`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${SITE_URL}/cancellation-and-refund`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${SITE_URL}/shipping-and-exchange`,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
   ];
 
   const categoryRoutes: MetadataRoute.Sitemap = categories
@@ -51,19 +76,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${SITE_URL}/shop?category=${encodeURIComponent(
         category.slug
       )}`,
-      changeFrequency: "weekly",
+      changeFrequency: "weekly" as const,
       priority: 0.7,
     }));
 
-  const brandRoutes: MetadataRoute.Sitemap = brands.map(
-    (brand) => ({
-      url: `${SITE_URL}/shop?brand=${encodeURIComponent(
-        brand.slug
-      )}`,
-      changeFrequency: "weekly",
-      priority: 0.6,
-    })
-  );
+  const brandRoutes: MetadataRoute.Sitemap = brands.map((brand) => ({
+    url: `${SITE_URL}/shop?brand=${encodeURIComponent(
+      brand.slug
+    )}`,
+    changeFrequency: "weekly" as const,
+    priority: 0.6,
+  }));
 
   return [...staticRoutes, ...categoryRoutes, ...brandRoutes];
 }
