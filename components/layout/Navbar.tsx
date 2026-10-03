@@ -205,7 +205,7 @@ function NavbarContent() {
               alt="Seven Bucks Nutrition"
               width={200}
               height={90}
-              priority
+              // priority
               sizes="(max-width: 640px) 140px, 170px"
               className={`h-auto w-auto object-contain transition-all duration-500 group-hover:scale-105 ${
                 floatingNavbar ? "max-h-[42px] sm:max-h-[46px]" : "max-h-[50px] sm:max-h-[58px]"

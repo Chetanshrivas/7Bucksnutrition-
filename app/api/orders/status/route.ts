@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-import { supabase } from "../../../../lib/supabase";
 import { sendOrderStatusEmail } from "../../../../lib/email";
 
 const ORDER_STATUSES = [
@@ -17,6 +17,16 @@ const ORDER_STATUSES = [
 
 export async function POST(request: NextRequest) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json(
+        { success: false, error: "Supabase is not configured." },
+        { status: 500 },
+      );
+    }
+
     const authorization = request.headers.get("authorization");
 
     if (!authorization?.startsWith("Bearer ")) {
@@ -34,6 +44,19 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       );
     }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    });
 
     const {
       data: { user },
@@ -68,14 +91,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const orderId =
-      typeof body?.orderId === "string"
-        ? body.orderId.trim()
-        : "";
+      typeof body?.orderId === "string" ? body.orderId.trim() : "";
 
     const newStatus =
-      typeof body?.newStatus === "string"
-        ? body.newStatus.trim()
-        : "";
+      typeof body?.newStatus === "string" ? body.newStatus.trim() : "";
 
     if (!orderId || !newStatus) {
       return NextResponse.json(
