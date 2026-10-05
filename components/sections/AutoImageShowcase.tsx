@@ -4,27 +4,27 @@ import { useEffect, useRef, useState } from "react";
 
 const IMAGES = [
   {
-    src: "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?auto=format&fit=crop&w=1800&q=85",
+    src: "https://res.cloudinary.com/sevenbucks/image/upload/v1791196561/compressed_square3.jpg",
     alt: "Gym training",
     label: "Flavored Protein",
   },
   {
-    src: "/hero/hero-runner.jpg",
+    src: "https://res.cloudinary.com/sevenbucks/image/upload/v1791196068/compressed_square.jpg",
     alt: "Gym workout",
     label: "Pre-Workout",
   },
   {
-    src: "/hero/PP.webp",
+    src: "https://res.cloudinary.com/sevenbucks/image/upload/v1791197747/compressed_square4.jpg",
     alt: "Protein and fitness",
     label: "Clear Protein",
   },
   {
-    src: "https://images.unsplash.com/photo-1579758629938-03607ccdbaba?auto=format&fit=crop&w=1800&q=85",
+    src: "https://res.cloudinary.com/sevenbucks/image/upload/v1791197557/compressed_image14.jpg",
     alt: "Strength training",
     label: "Mass Gainer",
   },
   {
-    src: "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1800&q=85",
+    src: "https://res.cloudinary.com/sevenbucks/image/upload/v1791196167/compressed_square2.jpg",
     alt: "Performance fuel",
     label: "Plant Based",
   },
