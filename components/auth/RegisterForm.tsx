@@ -5,6 +5,68 @@ import { FormEvent, useState } from "react";
 
 import { supabase } from "../../lib/supabase";
 
+/* ---------- small UI-only helpers (no logic) ---------- */
+
+const iconProps = {
+  width: 15,
+  height: 15,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.7,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  className:
+    "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#d9b06a]/70",
+};
+
+const UserIcon = (
+  <svg {...iconProps}>
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4 20c1.5-4 5-5 8-5s6.5 1 8 5" />
+  </svg>
+);
+const MailIcon = (
+  <svg {...iconProps}>
+    <rect x="3" y="5" width="18" height="14" rx="3" />
+    <path d="m4 7 8 6 8-6" />
+  </svg>
+);
+const LockIcon = (
+  <svg {...iconProps}>
+    <rect x="5" y="10" width="14" height="10" rx="2.5" />
+    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+  </svg>
+);
+const CheckLockIcon = (
+  <svg {...iconProps}>
+    <rect x="5" y="10" width="14" height="10" rx="2.5" />
+    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+    <path d="m9.5 15 1.8 1.8 3.2-3.4" />
+  </svg>
+);
+
+const inputClass =
+  "h-11 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] pl-10 pr-3 text-[13px] font-medium text-[#f5ead9] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),inset_0_2px_8px_rgba(0,0,0,0.35)] outline-none transition-all duration-300 placeholder:text-white/25 hover:border-white/15 focus:border-[#e8b56b]/60 focus:bg-white/[0.06] focus:shadow-[0_0_0_3px_rgba(232,181,107,0.10),inset_0_2px_8px_rgba(0,0,0,0.3)]";
+
+// hides non-essential bits on short screens so everything fits in one view
+const shortHide = "[@media(max-height:720px)]:hidden";
+
+const keyframes = `
+  @keyframes sb-rise {
+    from { opacity: 0; transform: translateY(14px) scale(0.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes sb-drift {
+    0%, 100% { transform: translate3d(0,0,0); }
+    50% { transform: translate3d(24px,-18px,0); }
+  }
+  @keyframes sb-shine {
+    from { transform: translateX(-120%) skewX(-20deg); }
+    to { transform: translateX(520%) skewX(-20deg); }
+  }
+`;
+
 export default function RegisterForm() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -106,83 +168,88 @@ export default function RegisterForm() {
   }
 
   /* =======================================================
-     BACKGROUND — shared visual language across both screens
+     SHARED BACKGROUND + BACK BUTTON (plain JSX, not components,
+     so they don't remount while typing)
   ======================================================= */
-  const Background = () => (
-    <div className="pointer-events-none absolute inset-0">
-      <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_15%_10%,#2a1c0f_0%,#150e08_45%,#0a0605_100%)]" />
 
-      {/* fitness themed ghost words */}
+  const background = (
+    <div className="pointer-events-none absolute inset-0">
+      <style>{keyframes}</style>
+      <div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_50%_-10%,#2e1f10_0%,#140d07_45%,#080504_100%)]" />
+
+      <div
+        className="absolute -left-24 top-1/4 h-[380px] w-[380px] rounded-full bg-[#c8913f]/[0.13] blur-[110px]"
+        style={{ animation: "sb-drift 14s ease-in-out infinite" }}
+      />
+      <div
+        className="absolute -right-24 bottom-0 h-[420px] w-[420px] rounded-full bg-[#a27d37]/[0.12] blur-[120px]"
+        style={{ animation: "sb-drift 18s ease-in-out infinite reverse" }}
+      />
+
+      <div
+        className="absolute inset-0 opacity-50"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(232,181,107,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(232,181,107,0.045) 1px, transparent 1px)",
+          backgroundSize: "56px 56px",
+          maskImage:
+            "radial-gradient(ellipse 65% 60% at 50% 45%, black 20%, transparent 75%)",
+          WebkitMaskImage:
+            "radial-gradient(ellipse 65% 60% at 50% 45%, black 20%, transparent 75%)",
+        }}
+      />
+
       <span
         aria-hidden
-        className="absolute -left-4 -top-6 select-none text-[8rem] font-black uppercase leading-none tracking-tight text-transparent sm:text-[11rem]"
-        style={{ WebkitTextStroke: "1px rgba(191,150,90,0.14)" }}
+        className="absolute -left-6 -top-8 hidden select-none text-[13rem] font-black uppercase leading-none tracking-tight text-transparent md:block"
+        style={{ WebkitTextStroke: "1px rgba(232,181,107,0.08)" }}
       >
         Power
       </span>
       <span
         aria-hidden
-        className="absolute -bottom-10 left-0 select-none text-[7rem] font-black uppercase leading-none tracking-tight text-transparent sm:text-[9.5rem]"
-        style={{ WebkitTextStroke: "1px rgba(191,150,90,0.12)" }}
+        className="absolute -bottom-12 -right-4 hidden select-none text-[11rem] font-black uppercase leading-none tracking-tight text-transparent md:block"
+        style={{ WebkitTextStroke: "1px rgba(232,181,107,0.07)" }}
       >
         Gains
       </span>
-      <span
-        aria-hidden
-        className="absolute -right-6 top-1/3 hidden -translate-y-1/2 select-none text-[6rem] font-black uppercase leading-none tracking-tight text-transparent sm:block sm:text-[7.5rem]"
-        style={{ WebkitTextStroke: "1px rgba(191,150,90,0.08)" }}
-      >
-        Fuel
-      </span>
 
-      <div
-        className="absolute -right-40 -top-40 h-[560px] w-[560px] rotate-[18deg] opacity-70 blur-2xl"
-        style={{
-          background:
-            "linear-gradient(115deg, transparent 40%, rgba(232,181,107,0.35) 48%, rgba(232,181,107,0.06) 52%, transparent 60%)",
-        }}
-      />
-      <div
-        className="absolute -bottom-52 -left-32 h-[520px] w-[520px] rotate-[8deg] opacity-60 blur-2xl"
-        style={{
-          background:
-            "linear-gradient(115deg, transparent 42%, rgba(162,125,55,0.3) 50%, transparent 58%)",
-        }}
-      />
-
-      <div
-        className="absolute bottom-6 left-6 h-16 w-16 opacity-40"
-        style={{
-          backgroundImage:
-            "radial-gradient(rgba(191,150,90,0.55) 1px, transparent 1.5px)",
-          backgroundSize: "9px 9px",
-        }}
-      />
-
-      <div className="absolute right-1/3 top-0 h-64 w-64 rounded-full bg-[#a27d37]/10 blur-3xl" />
-      <div className="absolute bottom-0 left-1/4 h-72 w-72 rounded-full bg-[#7a5a2a]/10 blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.65)_100%)]" />
     </div>
   );
 
-  const BackToStore = () => (
+  const backToStore = (
     <Link
       href="/"
-      className="group absolute left-5 top-5 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[9px] font-bold uppercase tracking-[0.16em] text-white/45 shadow-[0_4px_12px_rgba(0,0,0,0.25)] backdrop-blur-sm transition hover:border-[#a27d37]/40 hover:bg-white/[0.06] hover:text-[#e8b56b] sm:left-8 sm:top-8"
+      className="group absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-white/55 backdrop-blur-md transition-all duration-300 hover:border-[#e8b56b]/40 hover:bg-white/[0.08] hover:text-[#f0c98a] sm:left-8 sm:top-6 sm:text-[10px]"
     >
-      <span className="transition-transform duration-300 group-hover:-translate-x-0.5">
+      <span className="transition-transform duration-300 group-hover:-translate-x-1">
         ←
       </span>
       Back to Store
     </Link>
   );
 
-  const inputClip = {
-    clipPath: "polygon(0 0, 100% 0, 100% 72%, 91% 100%, 0 100%)",
-  };
+  const cardFrame = (children: React.ReactNode, maxW: string) => (
+    <div
+      className={`relative z-10 mt-8 w-full ${maxW} sm:mt-0`}
+      style={{ animation: "sb-rise 0.8s cubic-bezier(0.22,1,0.36,1) both" }}
+    >
+      <div className="absolute -inset-5 rounded-[40px] bg-[radial-gradient(60%_50%_at_50%_0%,rgba(232,181,107,0.18),transparent_70%)] blur-2xl" />
 
-  const CornerAccent = () => (
-    <span className="pointer-events-none absolute right-0 top-0 h-3.5 w-3.5 bg-gradient-to-bl from-[#e8b56b] to-[#a27d37] shadow-[0_2px_4px_rgba(0,0,0,0.3)] [clip-path:polygon(100%_0,100%_100%,0_0)]" />
+      <div className="relative rounded-[26px] bg-gradient-to-b from-[#e8b56b]/50 via-[#a27d37]/15 to-[#e8b56b]/25 p-px shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)]">
+        <div className="relative overflow-hidden rounded-[25px] bg-[#120c07]/90 backdrop-blur-2xl">
+          <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[#f0c98a]/80 to-transparent" />
+          <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-[#e8b56b]/[0.12] blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 -left-20 h-40 w-40 rounded-full bg-[#a27d37]/10 blur-3xl" />
+          {children}
+        </div>
+      </div>
+    </div>
   );
+
+  const shell =
+    "fixed inset-0 z-50 flex h-[100dvh] items-center justify-center overflow-hidden bg-[#080504] px-4";
 
   /* =======================================================
      EMAIL CONFIRMATION SCREEN
@@ -190,106 +257,89 @@ export default function RegisterForm() {
 
   if (confirmationSent) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-[#0c0805] px-4 py-4">
-        <Background />
-        <BackToStore />
+      <div className={shell}>
+        {background}
+        {backToStore}
 
-        <div
-          className="group relative z-10 w-full max-w-[440px]"
-          style={{ perspective: "1400px" }}
-        >
-          <div className="absolute -bottom-8 left-1/2 h-10 w-[85%] -translate-x-1/2 rounded-full bg-black/60 blur-2xl" />
+        {cardFrame(
+          <div className="relative px-6 py-7 text-center sm:px-9">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#e8b56b]/25 bg-gradient-to-b from-[#e8b56b]/20 to-[#e8b56b]/5 shadow-[0_12px_30px_-8px_rgba(232,181,107,0.4),inset_0_1px_0_rgba(255,255,255,0.12)]">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-[#f0c98a]"
+              >
+                <rect x="3" y="5" width="18" height="14" rx="3" />
+                <path d="m4 7 8 6 8-6" />
+              </svg>
+            </div>
 
-          <div
-            className="relative overflow-hidden rounded-[26px] border border-[#a27d37]/30 bg-[#171009]/75 shadow-[0_2px_0_0_rgba(255,255,255,0.05)_inset,0_1px_0_0_rgba(255,255,255,0.08)_inset,0_45px_100px_-20px_rgba(0,0,0,0.75),0_15px_40px_-10px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-transform duration-500 ease-out will-change-transform group-hover:[transform:rotateX(1.5deg)_rotateY(-1.5deg)_translateY(-3px)]"
-            style={{ transformStyle: "preserve-3d" }}
-          >
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#e8b56b]/60 to-transparent" />
-            <div className="pointer-events-none absolute -right-20 -top-20 h-44 w-44 rounded-full bg-[#e8b56b]/15 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-16 -left-16 h-36 w-36 rounded-full bg-[#a27d37]/10 blur-3xl" />
+            <p className="mt-4 text-[9px] font-bold uppercase tracking-[0.32em] text-[#d9b06a]">
+              Verify your email
+            </p>
 
-            <div className="relative px-6 py-8 text-center sm:px-10 sm:py-9">
-              <Link href="/" className="mx-auto flex w-fit items-center justify-center">
-                <img
-                  src="/logo/seven-bucks-logo.webp"
-                  alt="Seven Bucks Nutrition"
-                  className="h-9 w-auto object-contain opacity-90 drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
-                />
-              </Link>
+            <h1 className="mt-1.5 text-[28px] font-bold leading-none tracking-[-0.045em] text-[#f7ecd9] sm:text-[32px]">
+              Check your{" "}
+              <span className="bg-gradient-to-b from-[#f6d9a0] to-[#d9a050] bg-clip-text font-serif font-normal italic text-transparent">
+                inbox.
+              </span>
+            </h1>
 
-              <div className="mx-auto mt-6 flex h-16 w-16 items-center justify-center rounded-full border border-[#a27d37]/25 bg-[#e8b56b]/10 shadow-[0_10px_24px_-6px_rgba(232,181,107,0.3),inset_0_1px_0_rgba(255,255,255,0.1)]">
+            <p className="mt-3 text-[12px] leading-5 text-white/40">
+              We&apos;ve sent a verification link to
+            </p>
+
+            <p className="mt-1 break-all text-sm font-semibold text-[#f0c98a]">
+              {email}
+            </p>
+
+            <div className="mt-4 rounded-xl border border-[#e8b56b]/15 bg-[#e8b56b]/[0.05] px-4 py-3 text-left">
+              <div className="flex gap-2.5">
                 <svg
-                  width="26"
-                  height="26"
+                  width="14"
+                  height="14"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="1.7"
+                  strokeWidth="1.8"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="text-[#e8b56b]"
+                  className="mt-0.5 shrink-0 text-[#e8b56b]"
                 >
-                  <path d="M4 5h16v14H4z" />
-                  <path d="m4 6 8 6 8-6" />
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 11v5" />
+                  <path d="M12 8h.01" />
                 </svg>
+                <p className="text-[11px] leading-[1.15rem] text-white/45">
+                  Please verify your email before signing in. Check
+                  spam/junk if you don&apos;t see it.
+                </p>
               </div>
-
-              <p className="mt-5 text-[9px] font-bold uppercase tracking-[0.28em] text-[#d9b06a]">
-                Verify your email
-              </p>
-
-              <h1 className="mt-2 text-2xl font-bold tracking-[-0.04em] text-[#f5ead9] drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)] sm:text-[26px]">
-                Check your inbox.
-              </h1>
-
-              <p className="mx-auto mt-3 max-w-sm text-[12px] leading-5 text-white/40">
-                We&apos;ve sent a verification link to
-              </p>
-
-              <p className="mt-1 break-all text-sm font-semibold text-[#f0c98a]">
-                {email}
-              </p>
-
-              <div className="mx-auto mt-5 max-w-sm rounded-xl border border-[#a27d37]/20 bg-[#e8b56b]/[0.06] px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <div className="flex gap-2.5">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="mt-0.5 shrink-0 text-[#e8b56b]"
-                  >
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 11v5" />
-                    <path d="M12 8h.01" />
-                  </svg>
-                  <p className="text-[10.5px] leading-5 text-white/45">
-                    Please verify your email before signing in. Check
-                    spam/junk if you don&apos;t see it.
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                href="/login"
-                className="mt-6 inline-flex h-11 w-full max-w-xs items-center justify-center rounded-xl bg-gradient-to-b from-[#eea377] to-[#d9713c] px-8 text-[10px] font-bold uppercase tracking-[0.18em] text-[#20110a] shadow-[0_1px_0_rgba(255,255,255,0.35)_inset,0_10px_26px_-6px_rgba(217,113,60,0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_1px_0_rgba(255,255,255,0.4)_inset,0_14px_34px_-6px_rgba(217,113,60,0.65)]"
-              >
-                Go to Sign In
-              </Link>
-
-              <Link
-                href="/"
-                className="mt-4 block text-[9px] font-bold uppercase tracking-[0.16em] text-white/30 transition hover:text-white/60"
-              >
-                Back to Store
-              </Link>
             </div>
-          </div>
-        </div>
+
+            <Link
+              href="/login"
+              className="group/btn relative mt-5 flex h-12 w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-b from-[#f3c37e] via-[#e3a455] to-[#c98433] text-[11px] font-extrabold uppercase tracking-[0.22em] text-[#1d1007] shadow-[0_1px_0_rgba(255,255,255,0.5)_inset,0_14px_32px_-10px_rgba(227,164,85,0.6),0_4px_12px_rgba(0,0,0,0.4)] transition-all duration-300 hover:-translate-y-0.5"
+            >
+              <span className="pointer-events-none absolute inset-y-0 left-0 w-1/5 bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-0 group-hover/btn:opacity-100 group-hover/btn:[animation:sb-shine_0.9s_ease-out]" />
+              <span className="relative z-10">Go to Sign In</span>
+            </Link>
+
+            <Link
+              href="/"
+              className="mt-4 block text-[9px] font-bold uppercase tracking-[0.16em] text-white/30 transition hover:text-white/60"
+            >
+              Back to Store
+            </Link>
+          </div>,
+          "max-w-[400px]"
+        )}
       </div>
     );
   }
@@ -299,59 +349,47 @@ export default function RegisterForm() {
   ======================================================= */
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-[#0c0805] px-4 py-4">
-      <Background />
-      <BackToStore />
+    <div className={shell}>
+      {background}
+      {backToStore}
 
-      <div
-        className="group relative z-10 w-full max-w-[460px]"
-        style={{ perspective: "1400px" }}
-      >
-        <div className="absolute -bottom-8 left-1/2 h-10 w-[85%] -translate-x-1/2 rounded-full bg-black/60 blur-2xl" />
+      {cardFrame(
+        <>
+          {/* Header */}
+          <div className="relative px-6 pt-5 text-center sm:px-8">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl border border-[#e8b56b]/25 bg-gradient-to-b from-white/[0.08] to-white/[0.02] shadow-[0_8px_24px_-8px_rgba(232,181,107,0.35),inset_0_1px_0_rgba(255,255,255,0.12)]">
+              <img
+                src="/logo/seven-bucks-logo.webp"
+                alt="Seven Bucks Nutrition"
+                className="h-5 w-auto object-contain drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
+              />
+            </div>
 
-        <div
-          className="relative overflow-hidden rounded-[26px] border border-[#a27d37]/30 bg-[#171009]/75 shadow-[0_2px_0_0_rgba(255,255,255,0.05)_inset,0_1px_0_0_rgba(255,255,255,0.08)_inset,0_45px_100px_-20px_rgba(0,0,0,0.75),0_15px_40px_-10px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-transform duration-500 ease-out will-change-transform group-hover:[transform:rotateX(1.5deg)_rotateY(-1.5deg)_translateY(-3px)]"
-          style={{ transformStyle: "preserve-3d" }}
-        >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#e8b56b]/60 to-transparent" />
-          <div className="pointer-events-none absolute -right-20 -top-20 h-44 w-44 rounded-full bg-[#e8b56b]/15 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 h-36 w-36 rounded-full bg-[#a27d37]/10 blur-3xl" />
-
-          {/* Emblem header */}
-          <div className="relative flex items-center justify-center gap-3 px-6 pt-5">
-            <span className="h-px flex-1 bg-gradient-to-r from-transparent to-[#a27d37]/50" />
-            <img
-              src="/logo/seven-bucks-logo.webp"
-              alt="Seven Bucks Nutrition"
-              className="h-7 w-auto object-contain opacity-90 drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
-            />
-            <span className="h-px flex-1 bg-gradient-to-l from-transparent to-[#a27d37]/50" />
-          </div>
-
-          <div className="relative px-6 pt-3 text-center sm:px-8">
-            <p className="text-[9px] font-bold uppercase tracking-[0.32em] text-[#d9b06a]">
+            <p
+              className={`mt-2.5 text-[9px] font-semibold uppercase tracking-[0.36em] text-[#d9b06a] ${shortHide}`}
+            >
               Seven Bucks Nutrition
             </p>
-            <h1 className="mt-1 text-[22px] font-bold leading-[1.02] tracking-[-0.04em] text-[#f5ead9] drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)] sm:text-[25px]">
+            <h1 className="mt-1.5 text-[26px] font-bold leading-none tracking-[-0.045em] text-[#f7ecd9] sm:text-[30px]">
               Start your{" "}
-              <span className="font-serif italic font-normal text-[#e8b56b]">
+              <span className="bg-gradient-to-b from-[#f6d9a0] to-[#d9a050] bg-clip-text font-serif font-normal italic text-transparent">
                 journey.
               </span>
             </h1>
           </div>
 
           {/* Switch */}
-          <div className="relative mx-6 mt-3 grid grid-cols-2 rounded-xl border border-white/[0.04] bg-black/20 p-1 shadow-[inset_0_2px_6px_rgba(0,0,0,0.4)] sm:mx-8">
+          <div className="relative mx-6 mt-3.5 grid grid-cols-2 rounded-xl border border-white/[0.06] bg-black/30 p-1 sm:mx-8">
             <Link
               href="/login"
-              className="rounded-lg px-3 py-2 text-center transition hover:bg-white/[0.04]"
+              className="rounded-lg px-3 py-2 text-center transition hover:bg-white/[0.05]"
             >
-              <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/35">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">
                 Sign In
               </span>
             </Link>
-            <div className="rounded-lg bg-gradient-to-b from-[#e8b56b]/25 to-[#e8b56b]/10 px-3 py-2 text-center shadow-[0_2px_8px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.1)]">
-              <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#f0c98a]">
+            <div className="rounded-lg bg-gradient-to-b from-[#e8b56b]/25 to-[#e8b56b]/10 px-3 py-2 text-center shadow-[0_4px_14px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.12)]">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#f6d9a0]">
                 Create Account
               </span>
             </div>
@@ -360,77 +398,79 @@ export default function RegisterForm() {
           {/* Form */}
           <form
             onSubmit={handleSubmit}
-            className="relative space-y-2.5 px-6 pb-5 pt-4 sm:px-8"
+            className="relative space-y-2.5 px-6 pb-4 pt-3.5 sm:px-8"
           >
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               <div className="relative">
+                {UserIcon}
                 <input
                   id="register-name"
                   type="text"
                   autoComplete="name"
                   required
+                  aria-label="Full name"
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
                   placeholder="Full name"
-                  className="h-11 w-full rounded-lg border border-black/5 bg-[#faf6ef] px-3.5 text-[12.5px] font-medium text-[#171009] shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_6px_16px_rgba(0,0,0,0.25)] outline-none transition placeholder:text-black/35 focus:ring-2 focus:ring-[#e8b56b]/60"
-                  style={inputClip}
+                  className={inputClass}
                 />
-                <CornerAccent />
               </div>
 
               <div className="relative">
+                {MailIcon}
                 <input
                   id="register-email"
                   type="email"
                   autoComplete="email"
                   required
+                  aria-label="Email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="Email"
-                  className="h-11 w-full rounded-lg border border-black/5 bg-[#faf6ef] px-3.5 text-[12.5px] font-medium text-[#171009] shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_6px_16px_rgba(0,0,0,0.25)] outline-none transition placeholder:text-black/35 focus:ring-2 focus:ring-[#e8b56b]/60"
-                  style={inputClip}
+                  placeholder="Email address"
+                  className={inputClass}
                 />
-                <CornerAccent />
               </div>
             </div>
 
             <div className="relative">
+              {LockIcon}
               <input
                 id="register-password"
                 type="password"
                 autoComplete="new-password"
                 required
                 minLength={8}
+                aria-label="Password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Password (min. 8 characters)"
-                className="h-11 w-full rounded-lg border border-black/5 bg-[#faf6ef] px-3.5 text-[12.5px] font-medium text-[#171009] shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_6px_16px_rgba(0,0,0,0.25)] outline-none transition placeholder:text-black/35 focus:ring-2 focus:ring-[#e8b56b]/60"
-                style={inputClip}
+                className={inputClass}
               />
-              <CornerAccent />
             </div>
 
             <div className="relative">
+              {CheckLockIcon}
               <input
                 id="register-confirm-password"
                 type="password"
                 autoComplete="new-password"
                 required
                 minLength={8}
+                aria-label="Confirm password"
                 value={confirmPassword}
                 onChange={(event) =>
                   setConfirmPassword(event.target.value)
                 }
                 placeholder="Confirm password"
-                className="h-11 w-full rounded-lg border border-black/5 bg-[#faf6ef] px-3.5 text-[12.5px] font-medium text-[#171009] shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_6px_16px_rgba(0,0,0,0.25)] outline-none transition placeholder:text-black/35 focus:ring-2 focus:ring-[#e8b56b]/60"
-                style={inputClip}
+                className={inputClass}
               />
-              <CornerAccent />
             </div>
 
             {error && (
-              <div className="flex gap-2 rounded-lg border border-red-400/25 bg-red-500/10 px-3.5 py-2.5 text-[11px] leading-5 text-red-300 shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
-                <span className="mt-0.5 shrink-0 font-bold">!</span>
+              <div className="flex gap-2 rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-[11px] leading-4 text-red-300">
+                <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-400/20 text-[10px] font-bold">
+                  !
+                </span>
                 <span>{error}</span>
               </div>
             )}
@@ -438,23 +478,20 @@ export default function RegisterForm() {
             <button
               type="submit"
               disabled={loading}
-              className="group/btn relative flex h-11 w-full items-center justify-center overflow-hidden bg-gradient-to-b from-[#eea377] to-[#d9713c] text-[10px] font-bold uppercase tracking-[0.2em] text-[#20110a] shadow-[0_1px_0_rgba(255,255,255,0.35)_inset,0_10px_26px_-6px_rgba(217,113,60,0.55),0_4px_10px_rgba(0,0,0,0.3)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_1px_0_rgba(255,255,255,0.4)_inset,0_14px_34px_-6px_rgba(217,113,60,0.65),0_6px_14px_rgba(0,0,0,0.35)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{
-                clipPath:
-                  "polygon(0 0, 96% 0, 100% 35%, 100% 100%, 0 100%)",
-              }}
+              className="group/btn relative flex h-12 w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-b from-[#f3c37e] via-[#e3a455] to-[#c98433] text-[11px] font-extrabold uppercase tracking-[0.22em] text-[#1d1007] shadow-[0_1px_0_rgba(255,255,255,0.5)_inset,0_14px_32px_-10px_rgba(227,164,85,0.6),0_4px_12px_rgba(0,0,0,0.4)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_1px_0_rgba(255,255,255,0.55)_inset,0_20px_40px_-10px_rgba(227,164,85,0.75),0_6px_16px_rgba(0,0,0,0.45)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
             >
+              <span className="pointer-events-none absolute inset-y-0 left-0 w-1/5 bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-0 group-hover/btn:opacity-100 group-hover/btn:[animation:sb-shine_0.9s_ease-out]" />
               <span className="relative z-10">
                 {loading ? "Creating account..." : "Create Account"}
               </span>
               {!loading && (
-                <span className="absolute right-5 transition group-hover/btn:translate-x-1">
+                <span className="absolute right-5 text-base transition-transform duration-300 group-hover/btn:translate-x-1">
                   →
                 </span>
               )}
             </button>
 
-            <div className="flex items-center justify-center gap-2 pt-0.5">
+            <div className={`flex items-center justify-center gap-2 ${shortHide}`}>
               <svg
                 width="11"
                 height="11"
@@ -467,28 +504,25 @@ export default function RegisterForm() {
                 <path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Z" />
                 <path d="m9 12 2 2 4-4" />
               </svg>
-              <span className="text-[8.5px] font-medium uppercase tracking-[0.1em] text-white/35">
+              <span className="text-[9px] font-medium uppercase tracking-[0.14em] text-white/35">
                 Your information stays protected
               </span>
             </div>
           </form>
 
           {/* Footer */}
-          <div className="border-t border-white/[0.06] bg-black/10 px-6 py-3 sm:px-8">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-[10px] text-white/35">
-                Already have an account?
-              </p>
-              <Link
-                href="/login"
-                className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#e8b56b] transition hover:text-[#f0c98a]"
-              >
-                Sign in →
-              </Link>
-            </div>
+          <div className="relative flex items-center justify-between gap-3 border-t border-white/[0.06] bg-black/20 px-6 py-3 sm:px-8">
+            <p className="text-[11px] text-white/40">Already have an account?</p>
+            <Link
+              href="/login"
+              className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#e8b56b] transition hover:text-[#f6d9a0]"
+            >
+              Sign in →
+            </Link>
           </div>
-        </div>
-      </div>
+        </>,
+        "max-w-[430px]"
+      )}
     </div>
   );
 }
