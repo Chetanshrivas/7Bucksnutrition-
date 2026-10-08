@@ -6,6 +6,13 @@ import { toast } from "sonner";
 
 import { supabase } from "../../../lib/supabase";
 
+type ProductImageRow = {
+  image_url: string | null;
+  is_primary: boolean | null;
+  variant_id: string | null;
+  sort_order: number | null;
+};
+
 type Product = {
   id: string;
   name: string;
@@ -24,6 +31,8 @@ type Product = {
   categories: {
     name: string;
   } | null;
+
+  product_images: ProductImageRow[];
 };
 
 type StatusFilter = "all" | "active" | "inactive";
@@ -46,6 +55,45 @@ function getInitials(name: string): string {
     `${words[0]?.charAt(0) || ""}${words[1]?.charAt(0) || ""}`.toUpperCase() ||
     "P"
   );
+}
+
+/**
+ * Picks the thumbnail image for the admin list.
+ *
+ * Preference order:
+ * 1. A product-level image (variant_id === null) marked is_primary
+ * 2. The first product-level image, by sort_order
+ * 3. If the product has ONLY variant images (no product-level images),
+ *    fall back to the first variant image by sort_order.
+ */
+function getThumbnailUrl(
+  images: ProductImageRow[] | null | undefined
+): string | null {
+  if (!images || images.length === 0) {
+    return null;
+  }
+
+  const productLevel = images
+    .filter((image) => image.variant_id === null && image.image_url)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+  const primaryProductLevel = productLevel.find(
+    (image) => image.is_primary
+  );
+
+  if (primaryProductLevel?.image_url) {
+    return primaryProductLevel.image_url;
+  }
+
+  if (productLevel[0]?.image_url) {
+    return productLevel[0].image_url;
+  }
+
+  const anyImage = [...images]
+    .filter((image) => image.image_url)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+  return anyImage[0]?.image_url ?? null;
 }
 
 function SearchIcon() {
@@ -116,6 +164,41 @@ function ChevronRight() {
     >
       <path d="m9 18 6-6-6-6" />
     </svg>
+  );
+}
+
+/**
+ * Product thumbnail used in both the desktop table and the mobile
+ * cards. Falls back to the initials tile when there is no image,
+ * or when the image URL fails to load.
+ */
+function ProductThumbnail({
+  name,
+  imageUrl,
+}: {
+  name: string;
+  imageUrl: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  if (!imageUrl || failed) {
+    return (
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-black/[0.07] bg-[#f5f2eb] text-[10px] font-bold text-black/45">
+        {getInitials(name)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-black/[0.07] bg-white">
+      <img
+        src={imageUrl}
+        alt={name}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="h-full w-full object-contain p-1"
+      />
+    </div>
   );
 }
 
@@ -211,6 +294,12 @@ export default function AdminProductsPage() {
             ),
             categories!products_category_id_fkey (
               name
+            ),
+            product_images (
+              image_url,
+              is_primary,
+              variant_id,
+              sort_order
             )
           `,
           { count: "exact" }
@@ -832,122 +921,128 @@ export default function AdminProductsPage() {
 
                     <tbody>
                       {products.map(
-                        (product) => (
-                          <tr
-                            key={product.id}
-                            className="group border-b border-black/[0.05] transition hover:bg-[#faf9f6]/70 last:border-0"
-                          >
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-3.5">
-                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-black/[0.07] bg-[#f5f2eb] text-[10px] font-bold text-black/45">
-                                  {getInitials(
-                                    product.name
-                                  )}
-                                </div>
+                        (product) => {
+                          const thumbnailUrl =
+                            getThumbnailUrl(
+                              product.product_images
+                            );
 
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <p className="max-w-[310px] truncate text-xs font-semibold">
-                                      {product.name}
-                                    </p>
-
-                                    {product.is_bestseller && (
-                                      <span className="hidden rounded-full bg-[#171512] px-2 py-0.5 text-[7px] font-bold uppercase tracking-[0.08em] text-white xl:inline-flex">
-                                        Bestseller
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {product.subtitle && (
-                                    <p className="mt-1 max-w-[340px] truncate text-[9px] text-black/35">
-                                      {
-                                        product.subtitle
-                                      }
-                                    </p>
-                                  )}
-
-                                  <p className="mt-1 max-w-[340px] truncate font-mono text-[8px] text-black/25">
-                                    /{product.slug}
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
-
-                            <td className="px-4 py-4 text-xs text-black/60">
-                              {product.brands?.name ??
-                                "—"}
-                            </td>
-
-                            <td className="px-4 py-4">
-                              <span className="inline-flex rounded-lg bg-[#f5f2eb] px-2.5 py-1.5 text-[8px] font-semibold text-black/50">
-                                {product.categories
-                                  ?.name ??
-                                  "Uncategorized"}
-                              </span>
-                            </td>
-
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] font-semibold">
-                                  {Number(
-                                    product.rating || 0
-                                  ).toFixed(1)}
-                                </span>
-
-                                <span className="text-[10px] text-[#9c8250]">
-                                  ★
-                                </span>
-
-                                <span className="text-[8px] text-black/30">
-                                  {product.review_count ||
-                                    0}
-                                </span>
-                              </div>
-                            </td>
-
-                            <td className="px-4 py-4">
-                              <div className="flex flex-wrap gap-1.5">
-                                <span
-                                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.1em] ${
-                                    product.is_active
-                                      ? "bg-green-50 text-green-700"
-                                      : "bg-black/[0.05] text-black/40"
-                                  }`}
-                                >
-                                  <span
-                                    className={`h-1.5 w-1.5 rounded-full ${
-                                      product.is_active
-                                        ? "bg-green-500"
-                                        : "bg-black/20"
-                                    }`}
+                          return (
+                            <tr
+                              key={product.id}
+                              className="group border-b border-black/[0.05] transition hover:bg-[#faf9f6]/70 last:border-0"
+                            >
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3.5">
+                                  <ProductThumbnail
+                                    name={product.name}
+                                    imageUrl={thumbnailUrl}
                                   />
 
-                                  {product.is_active
-                                    ? "Active"
-                                    : "Inactive"}
-                                </span>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="max-w-[310px] truncate text-xs font-semibold">
+                                        {product.name}
+                                      </p>
 
-                                {product.is_featured && (
-                                  <span className="inline-flex rounded-full bg-[#f5f2eb] px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.08em] text-[#8a7247]">
-                                    Featured
+                                      {product.is_bestseller && (
+                                        <span className="hidden rounded-full bg-[#171512] px-2 py-0.5 text-[7px] font-bold uppercase tracking-[0.08em] text-white xl:inline-flex">
+                                          Bestseller
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {product.subtitle && (
+                                      <p className="mt-1 max-w-[340px] truncate text-[9px] text-black/35">
+                                        {
+                                          product.subtitle
+                                        }
+                                      </p>
+                                    )}
+
+                                    <p className="mt-1 max-w-[340px] truncate font-mono text-[8px] text-black/25">
+                                      /{product.slug}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="px-4 py-4 text-xs text-black/60">
+                                {product.brands?.name ??
+                                  "—"}
+                              </td>
+
+                              <td className="px-4 py-4">
+                                <span className="inline-flex rounded-lg bg-[#f5f2eb] px-2.5 py-1.5 text-[8px] font-semibold text-black/50">
+                                  {product.categories
+                                    ?.name ??
+                                    "Uncategorized"}
+                                </span>
+                              </td>
+
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[11px] font-semibold">
+                                    {Number(
+                                      product.rating || 0
+                                    ).toFixed(1)}
                                   </span>
-                                )}
-                              </div>
-                            </td>
 
-                            <td className="px-6 py-4 text-right">
-                              <Link
-                                href={`/admin/products/${product.id}/edit`}
-                                className="inline-flex h-9 items-center gap-2 rounded-lg border border-black/[0.08] bg-white px-3.5 text-[9px] font-bold uppercase tracking-[0.1em] text-black/55 transition hover:border-black/20 hover:bg-[#171512] hover:text-white"
-                              >
-                                Edit
-                                <span className="text-xs">
-                                  →
-                                </span>
-                              </Link>
-                            </td>
-                          </tr>
-                        )
+                                  <span className="text-[10px] text-[#9c8250]">
+                                    ★
+                                  </span>
+
+                                  <span className="text-[8px] text-black/30">
+                                    {product.review_count ||
+                                      0}
+                                  </span>
+                                </div>
+                              </td>
+
+                              <td className="px-4 py-4">
+                                <div className="flex flex-wrap gap-1.5">
+                                  <span
+                                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.1em] ${
+                                      product.is_active
+                                        ? "bg-green-50 text-green-700"
+                                        : "bg-black/[0.05] text-black/40"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`h-1.5 w-1.5 rounded-full ${
+                                        product.is_active
+                                          ? "bg-green-500"
+                                          : "bg-black/20"
+                                      }`}
+                                    />
+
+                                    {product.is_active
+                                      ? "Active"
+                                      : "Inactive"}
+                                  </span>
+
+                                  {product.is_featured && (
+                                    <span className="inline-flex rounded-full bg-[#f5f2eb] px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.08em] text-[#8a7247]">
+                                      Featured
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="px-6 py-4 text-right">
+                                <Link
+                                  href={`/admin/products/${product.id}/edit`}
+                                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-black/[0.08] bg-white px-3.5 text-[9px] font-bold uppercase tracking-[0.1em] text-black/55 transition hover:border-black/20 hover:bg-[#171512] hover:text-white"
+                                >
+                                  Edit
+                                  <span className="text-xs">
+                                    →
+                                  </span>
+                                </Link>
+                              </td>
+                            </tr>
+                          );
+                        }
                       )}
                     </tbody>
                   </table>
@@ -958,127 +1053,133 @@ export default function AdminProductsPage() {
                 ================================================== */}
                 <div className="divide-y divide-black/[0.06] lg:hidden">
                   {products.map(
-                    (product, index) => (
-                      <article
-                        key={product.id}
-                        className="p-4 sm:p-5"
-                      >
-                        <div className="flex gap-3.5">
-                          {/* Number + initials */}
-                          <div className="relative shrink-0">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-black/[0.07] bg-[#f5f2eb] text-[10px] font-bold text-black/45">
-                              {getInitials(
-                                product.name
-                              )}
+                    (product, index) => {
+                      const thumbnailUrl =
+                        getThumbnailUrl(
+                          product.product_images
+                        );
+
+                      return (
+                        <article
+                          key={product.id}
+                          className="p-4 sm:p-5"
+                        >
+                          <div className="flex gap-3.5">
+                            {/* Number + thumbnail */}
+                            <div className="relative shrink-0">
+                              <ProductThumbnail
+                                name={product.name}
+                                imageUrl={thumbnailUrl}
+                              />
+
+                              <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-[#171512] px-1 text-[7px] font-bold text-white">
+                                {(page - 1) *
+                                  PAGE_SIZE +
+                                  index +
+                                  1}
+                              </span>
                             </div>
 
-                            <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-[#171512] px-1 text-[7px] font-bold text-white">
-                              {(page - 1) *
-                                PAGE_SIZE +
-                                index +
-                                1}
-                            </span>
-                          </div>
+                            <div className="min-w-0 flex-1">
+                              {/* Name + Status */}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="break-words text-xs font-semibold leading-4">
+                                      {product.name}
+                                    </p>
 
-                          <div className="min-w-0 flex-1">
-                            {/* Name + Status */}
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  <p className="break-words text-xs font-semibold leading-4">
-                                    {product.name}
-                                  </p>
+                                    {product.is_bestseller && (
+                                      <span className="shrink-0 rounded-full bg-[#171512] px-2 py-0.5 text-[7px] font-bold uppercase tracking-[0.06em] text-white">
+                                        Bestseller
+                                      </span>
+                                    )}
+                                  </div>
 
-                                  {product.is_bestseller && (
-                                    <span className="shrink-0 rounded-full bg-[#171512] px-2 py-0.5 text-[7px] font-bold uppercase tracking-[0.06em] text-white">
-                                      Bestseller
-                                    </span>
+                                  {product.subtitle && (
+                                    <p className="mt-1 line-clamp-2 text-[9px] leading-4 text-black/40">
+                                      {
+                                        product.subtitle
+                                      }
+                                    </p>
                                   )}
                                 </div>
 
-                                {product.subtitle && (
-                                  <p className="mt-1 line-clamp-2 text-[9px] leading-4 text-black/40">
-                                    {
-                                      product.subtitle
-                                    }
-                                  </p>
+                                <span
+                                  className={`shrink-0 rounded-full px-2.5 py-1 text-[7px] font-bold uppercase tracking-[0.08em] ${
+                                    product.is_active
+                                      ? "bg-green-50 text-green-700"
+                                      : "bg-black/[0.05] text-black/40"
+                                  }`}
+                                >
+                                  {product.is_active
+                                    ? "Active"
+                                    : "Inactive"}
+                                </span>
+                              </div>
+
+                              {/* Meta */}
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                <span className="max-w-full truncate rounded-lg bg-[#f5f2eb] px-2 py-1 text-[8px] font-semibold text-black/45">
+                                  {product.brands?.name ??
+                                    "No brand"}
+                                </span>
+
+                                <span className="max-w-full truncate rounded-lg bg-[#f5f2eb] px-2 py-1 text-[8px] font-semibold text-black/45">
+                                  {product.categories
+                                    ?.name ??
+                                    "No category"}
+                                </span>
+
+                                {product.is_featured && (
+                                  <span className="rounded-lg bg-[#f5f2eb] px-2 py-1 text-[8px] font-semibold text-[#8a7247]">
+                                    Featured
+                                  </span>
                                 )}
                               </div>
 
-                              <span
-                                className={`shrink-0 rounded-full px-2.5 py-1 text-[7px] font-bold uppercase tracking-[0.08em] ${
-                                  product.is_active
-                                    ? "bg-green-50 text-green-700"
-                                    : "bg-black/[0.05] text-black/40"
-                                }`}
-                              >
-                                {product.is_active
-                                  ? "Active"
-                                  : "Inactive"}
-                              </span>
-                            </div>
+                              {/* Bottom row */}
+                              <div className="mt-4 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 text-[9px] text-black/40">
+                                    <span className="font-semibold text-black/65">
+                                      {Number(
+                                        product.rating ||
+                                          0
+                                      ).toFixed(1)}
+                                    </span>
 
-                            {/* Meta */}
-                            <div className="mt-3 flex flex-wrap gap-1.5">
-                              <span className="max-w-full truncate rounded-lg bg-[#f5f2eb] px-2 py-1 text-[8px] font-semibold text-black/45">
-                                {product.brands?.name ??
-                                  "No brand"}
-                              </span>
+                                    <span className="text-[#9c8250]">
+                                      ★
+                                    </span>
 
-                              <span className="max-w-full truncate rounded-lg bg-[#f5f2eb] px-2 py-1 text-[8px] font-semibold text-black/45">
-                                {product.categories
-                                  ?.name ??
-                                  "No category"}
-                              </span>
+                                    <span>
+                                      {product.review_count ||
+                                        0}{" "}
+                                      reviews
+                                    </span>
+                                  </div>
 
-                              {product.is_featured && (
-                                <span className="rounded-lg bg-[#f5f2eb] px-2 py-1 text-[8px] font-semibold text-[#8a7247]">
-                                  Featured
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Bottom row */}
-                            <div className="mt-4 flex items-center justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 text-[9px] text-black/40">
-                                  <span className="font-semibold text-black/65">
-                                    {Number(
-                                      product.rating ||
-                                        0
-                                    ).toFixed(1)}
-                                  </span>
-
-                                  <span className="text-[#9c8250]">
-                                    ★
-                                  </span>
-
-                                  <span>
-                                    {product.review_count ||
-                                      0}{" "}
-                                    reviews
-                                  </span>
+                                  <p className="mt-1 max-w-[180px] truncate font-mono text-[7px] text-black/20">
+                                    /{product.slug}
+                                  </p>
                                 </div>
 
-                                <p className="mt-1 max-w-[180px] truncate font-mono text-[7px] text-black/20">
-                                  /{product.slug}
-                                </p>
+                                <Link
+                                  href={`/admin/products/${product.id}/edit`}
+                                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-[8px] font-bold uppercase tracking-[0.1em] text-black/55 transition active:scale-[0.98] hover:border-black/20 hover:bg-[#171512] hover:text-white"
+                                >
+                                  Edit
+                                  <span className="text-xs">
+                                    →
+                                  </span>
+                                </Link>
                               </div>
-
-                              <Link
-                                href={`/admin/products/${product.id}/edit`}
-                                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-black/[0.08] bg-white px-3 text-[8px] font-bold uppercase tracking-[0.1em] text-black/55 transition active:scale-[0.98] hover:border-black/20 hover:bg-[#171512] hover:text-white"
-                              >
-                                Edit
-                                <span className="text-xs">
-                                  →
-                                </span>
-                              </Link>
                             </div>
                           </div>
-                        </div>
-                      </article>
-                    )
+                        </article>
+                      );
+                    }
                   )}
                 </div>
               </>
