@@ -93,11 +93,10 @@ export default function ProductCard({ product }: ProductCardProps) {
           </div>
 
           {discount !== null && discount > 0 && (
-            <span className="absolute left-3 top-3 z-10 rounded-full bg-[#211710] px-2.5 py-1.5 text-[7px] font-bold uppercase tracking-[0.11em] text-[#f5f1e8] shadow-[0_5px_16px_rgba(0,0,0,0.12)] sm:left-4 sm:top-4">
-              {discount}% Off
-            </span>
-          )}
-
+  <span className="absolute left-2 top-2 z-10 rounded-full bg-[#211710] px-1.5 py-1 text-[6px] font-bold uppercase tracking-[0.08em] text-[#f5f1e8] shadow-[0_4px_12px_rgba(0,0,0,0.12)] sm:left-4 sm:top-4 sm:px-2.5 sm:py-1.5 sm:text-[7px] sm:tracking-[0.11em]">
+    {discount}% Off
+  </span>
+)}
           {!available && (
             <span className="absolute right-3 top-3 z-10 rounded-full border border-[#211710]/[0.07] bg-white/90 px-2.5 py-1.5 text-[7px] font-bold uppercase tracking-[0.1em] text-[#211710]/50 shadow-sm backdrop-blur-md sm:right-4 sm:top-4">
               Out of Stock

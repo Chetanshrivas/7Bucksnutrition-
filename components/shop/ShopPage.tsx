@@ -1,6 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -156,6 +162,34 @@ function ShopPageContent() {
     useState(false);
 
   /* =========================================================
+     FILTER RESULT CACHE
+
+     Keyed by the exact filter/page/sort/search combination.
+     Switching back to a filter combo already fetched this
+     session renders INSTANTLY from cache — no network round
+     trip, no skeleton flash — while a fresh background fetch
+     still runs to keep the cache correct if data changed.
+
+     requestTokenRef guards against race conditions: if the
+     person clicks three filters quickly, only the response
+     for the LAST request is ever applied to state, so an
+     earlier, slower response can never overwrite newer results.
+  ========================================================= */
+
+  const resultsCacheRef = useRef(
+    new Map<
+      string,
+      {
+        products: Product[];
+        total: number;
+        totalPages: number;
+      }
+    >()
+  );
+
+  const requestTokenRef = useRef(0);
+
+  /* =========================================================
      MAIN CATEGORIES
   ========================================================= */
 
@@ -209,6 +243,19 @@ function ShopPageContent() {
 
   /* =========================================================
      CATEGORY IDS FOR QUERY
+
+     FIX: previously this only returned the CHILD category ids
+     when a parent/main category was selected (e.g. selecting
+     "Protein" only queried by its sub-categories' ids). That
+     relied entirely on the `parent_category_id.eq.<id>` half
+     of the OR clause inside getProductsPage to catch products
+     assigned directly to the main category itself. Including
+     the main category's own id here too means the `category_id
+     .in(...)` half is now also correct and self-sufficient —
+     category filtering no longer depends on that second clause
+     lining up exactly, which is what caused selecting a
+     category to sometimes under-count or lag behind the actual
+     product set.
   ========================================================= */
 
   const categoryIdsForQuery = useMemo(() => {
@@ -224,9 +271,7 @@ function ShopPageContent() {
         )
         .map((category) => category.id);
 
-      return children.length > 0
-        ? children
-        : [activeCategoryObject.id];
+      return [activeCategoryObject.id, ...children];
     }
 
     return [activeCategory];
@@ -392,18 +437,60 @@ function ShopPageContent() {
      the whole catalog. Changing `currentPage` triggers a fresh,
      small fetch for just that page, so exactly PAGE_SIZE products
      load at a time.
+
+     CACHE + NO FULL-GRID BLANK:
+
+     1. Build a key from every filter that affects the result.
+     2. If that exact combination was already fetched this
+        session, show it immediately (no spinner, no skeleton) —
+        this is what makes switching between filters already
+        visited feel instant.
+     3. A background fetch still runs every time (even on a
+        cache hit) to keep results correct if the catalog
+        changed, but it updates the UI quietly — the product
+        grid never gets blanked out to a skeleton again after
+        the very first load, it just swaps in-place once the
+        fresh data arrives.
+     4. requestTokenRef makes sure that if filters change again
+        before a request finishes, that stale response is
+        dropped instead of overwriting newer results.
   ========================================================= */
 
   useEffect(() => {
-    let cancelled = false;
+    if (categories.length === 0) {
+      return;
+    }
+
+    const cacheKey = JSON.stringify({
+      page: currentPage,
+      category: activeCategory,
+      categoryIds: categoryIdsForQuery,
+      brands: selectedBrandIds,
+      search,
+      sortBy,
+    });
+
+    const cached =
+      resultsCacheRef.current.get(cacheKey);
+
+    const thisRequest =
+      ++requestTokenRef.current;
+
+    if (cached) {
+      // Instant render from cache — no loading state at all.
+      setProducts(cached.products);
+      setTotalProducts(cached.total);
+      setTotalPages(cached.totalPages);
+      setLoading(false);
+      setPageLoading(false);
+    } else {
+      // No cache yet for this combination: show the loading
+      // state (skeleton on first load, lightweight indicator
+      // on later ones) since there's nothing to display yet.
+      setPageLoading(true);
+    }
 
     async function loadProducts() {
-      if (categories.length === 0) {
-        return;
-      }
-
-      setPageLoading(true);
-
       try {
         const result =
           await getProductsPage({
@@ -423,9 +510,24 @@ function ShopPageContent() {
             sortBy,
           });
 
-        if (cancelled) {
+        // A newer request has started since this one fired —
+        // drop this response rather than let it overwrite
+        // fresher results.
+        if (
+          requestTokenRef.current !==
+          thisRequest
+        ) {
           return;
         }
+
+        resultsCacheRef.current.set(
+          cacheKey,
+          {
+            products: result.products,
+            total: result.total,
+            totalPages: result.totalPages,
+          }
+        );
 
         setProducts(result.products);
         setTotalProducts(result.total);
@@ -436,13 +538,20 @@ function ShopPageContent() {
           error
         );
 
-        if (!cancelled) {
+        if (
+          requestTokenRef.current ===
+          thisRequest &&
+          !cached
+        ) {
           setProducts([]);
           setTotalProducts(0);
           setTotalPages(0);
         }
       } finally {
-        if (!cancelled) {
+        if (
+          requestTokenRef.current ===
+          thisRequest
+        ) {
           setLoading(false);
           setPageLoading(false);
         }
@@ -450,10 +559,6 @@ function ShopPageContent() {
     }
 
     void loadProducts();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     currentPage,
     activeCategory,
@@ -726,11 +831,6 @@ function ShopPageContent() {
   const hasActiveCategory =
     activeCategory !== "all";
 
-  const showingParentCategory =
-    activeCategory !== "all" &&
-    activeCategoryObject?.parent_id ===
-      null;
-
   /* =========================================================
      SKELETON
   ========================================================= */
@@ -771,17 +871,17 @@ function ShopPageContent() {
   if (loading) {
     return (
       <main className="min-h-screen overflow-x-hidden bg-[#f5f2eb] text-[#171512]">
-        <section className="border-b border-black/[0.08] px-5 pb-6 pt-28 sm:px-8 sm:pb-10 sm:pt-36 lg:px-12 lg:pt-40">
+        <section className="border-b border-black/[0.08] px-5 pb-5 pt-24 sm:px-8 sm:pb-7 sm:pt-28 lg:px-12 lg:pt-32">
           <div className="mx-auto max-w-[1440px]">
-            <div className="mb-3 inline-flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#a27d37]" />
+            <div className="mb-2.5 inline-flex items-center gap-1.5">
+              <span className="h-1 w-1 rounded-full bg-[#a27d37]" />
 
-              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#a27d37]">
+              <p className="text-[8px] font-bold uppercase tracking-[0.26em] text-[#a27d37]">
                 Seven Bucks Nutrition
               </p>
             </div>
 
-            <h1 className="max-w-[850px] text-[clamp(40px,8vw,96px)] font-semibold leading-[0.95] tracking-[-0.055em] sm:leading-[0.9] sm:tracking-[-0.065em]">
+            <h1 className="max-w-[850px] text-[clamp(42px,8.5vw,100px)] font-semibold leading-[0.92] tracking-[-0.055em] sm:leading-[0.88] sm:tracking-[-0.065em]">
               Shop
               <span className="ml-3 font-serif italic text-[#a27d37]">
                 Performance.
@@ -790,7 +890,7 @@ function ShopPageContent() {
           </div>
         </section>
 
-        <section className="px-5 py-10 sm:px-8 sm:py-12 lg:px-12 lg:py-16">
+        <section className="px-5 py-6 sm:px-8 sm:py-8 lg:px-12 lg:py-10">
           <div className="mx-auto max-w-[1440px]">
             <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4 lg:gap-x-6 lg:gap-y-12">
               {skeletonCards}
@@ -809,13 +909,15 @@ function ShopPageContent() {
     <main className="min-h-screen overflow-x-hidden bg-[#f5f2eb] text-[#171512]">
 
       {/* =====================================================
-          HEADER
+          HEADER — compact eyebrow, more prominent heading,
+          tighter top/bottom padding so filters + products
+          come into view sooner.
       ===================================================== */}
 
-      <section className="border-b border-black/[0.08] px-5 pb-6 pt-28 sm:px-8 sm:pb-10 sm:pt-36 lg:px-12 lg:pt-40">
+      <section className="border-b border-black/[0.08] px-5 pb-5 pt-24 sm:px-8 sm:pb-7 sm:pt-28 lg:px-12 lg:pt-32">
         <div className="mx-auto max-w-[1440px]">
 
-          <div className="mb-5 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.2em] text-black/35 sm:mb-8">
+          <div className="mb-3 flex items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.18em] text-black/35 sm:mb-5">
             <Link
               href="/"
               className="transition-colors hover:text-black"
@@ -833,7 +935,7 @@ function ShopPageContent() {
               <>
                 <span>/</span>
 
-                <span className="text-[#a27d37]">
+                <span className="truncate text-[#a27d37]">
                   {selectedLabel}
                 </span>
               </>
@@ -843,25 +945,25 @@ function ShopPageContent() {
               <>
                 <span>/</span>
 
-                <span className="max-w-[180px] truncate text-[#a27d37]">
+                <span className="max-w-[140px] truncate text-[#a27d37]">
                   {selectedBrandLabel}
                 </span>
               </>
             )}
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end lg:gap-10">
+          <div className="grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end lg:gap-10">
 
             <div>
-              <div className="mb-3 inline-flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#a27d37]" />
+              <div className="mb-2 inline-flex items-center gap-1.5">
+                <span className="h-1 w-1 rounded-full bg-[#a27d37]" />
 
-                <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#a27d37]">
+                <p className="text-[8px] font-bold uppercase tracking-[0.26em] text-[#a27d37]">
                   Seven Bucks Nutrition
                 </p>
               </div>
 
-              <h1 className="max-w-[850px] text-[clamp(40px,8vw,96px)] font-semibold leading-[0.95] tracking-[-0.055em] sm:leading-[0.9] sm:tracking-[-0.065em]">
+              <h1 className="max-w-[850px] text-[clamp(42px,8.5vw,100px)] font-semibold leading-[0.92] tracking-[-0.055em] sm:leading-[0.88] sm:tracking-[-0.065em]">
                 Shop
                 <span className="ml-3 font-serif italic text-[#a27d37]">
                   Performance.
@@ -871,17 +973,14 @@ function ShopPageContent() {
               {/* Description: hidden on the smallest screens so the
                   filter bar and products come into view sooner —
                   still shown from sm: up. */}
-              <p className="mt-4 hidden max-w-[560px] text-[13px] leading-6 text-black/50 sm:block sm:mt-6">
+              <p className="mt-3 hidden max-w-[520px] text-[12px] leading-6 text-black/50 sm:block sm:mt-4">
                 Every product here earns its place on the shelf —
                 dosed the way the research says, verified before it
                 ships.
               </p>
             </div>
 
-            {/* Collection / Products quick-stats: desktop only — the
-                "Showing N" line near the product grid already covers
-                this on mobile, so repeating it up here just adds
-                scroll before anyone sees a filter or a product. */}
+            {/* Collection / Products quick-stats: desktop only. */}
             <div className="hidden items-end gap-7 lg:flex lg:pb-1">
 
               <div>
@@ -889,19 +988,19 @@ function ShopPageContent() {
                   Collection
                 </p>
 
-                <p className="mt-2 max-w-[140px] truncate text-sm font-semibold">
+                <p className="mt-1.5 max-w-[140px] truncate text-sm font-semibold">
                   {selectedLabel}
                 </p>
               </div>
 
-              <div className="h-12 w-px bg-black/10" />
+              <div className="h-10 w-px bg-black/10" />
 
               <div>
                 <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-black/30">
                   Products
                 </p>
 
-                <p className="mt-2 font-serif text-xl italic text-[#a27d37]">
+                <p className="mt-1.5 font-serif text-lg italic text-[#a27d37]">
                   {totalProducts}
                 </p>
               </div>
@@ -922,24 +1021,24 @@ function ShopPageContent() {
 
           <div className="hidden md:block">
 
-            <div className="flex min-h-[76px] items-center justify-between gap-6">
+            <div className="flex min-h-[64px] items-center justify-between gap-6">
 
-              {/* CATEGORY */}
+              {/* CATEGORY — compact pill tabs, no redundant counts */}
 
-              <div className="flex min-w-0 items-center gap-2 overflow-x-auto py-3 scrollbar-none">
+              <div className="flex min-w-0 items-center gap-2 overflow-x-auto py-2.5 scrollbar-none">
 
                 <button
                   type="button"
                   onClick={() =>
                     changeCategory("all")
                   }
-                  className={`shrink-0 rounded-full px-5 py-2.5 text-[9px] font-bold uppercase tracking-[0.13em] transition-all ${
+                  className={`shrink-0 rounded-full px-4 py-2 text-[9px] font-bold uppercase tracking-[0.12em] transition-all ${
                     activeCategory === "all"
                       ? "bg-[#171512] text-white shadow-[0_6px_16px_rgba(23,21,18,0.25)]"
                       : "border border-black/10 bg-white/40 text-black/45 hover:border-black/20 hover:bg-white hover:text-black"
                   }`}
                 >
-                  All Categories
+                  All
                 </button>
 
                 {mainCategories.map(
@@ -950,13 +1049,6 @@ function ShopPageContent() {
                       activeMainCategory?.id ===
                         category.id;
 
-                    const childCount =
-                      categories.filter(
-                        (child) =>
-                          child.parent_id ===
-                          category.id
-                      ).length;
-
                     return (
                       <button
                         key={category.id}
@@ -966,25 +1058,13 @@ function ShopPageContent() {
                             category.id
                           )
                         }
-                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-5 py-2.5 text-[9px] font-bold uppercase tracking-[0.13em] transition-all ${
+                        className={`shrink-0 rounded-full px-4 py-2 text-[9px] font-bold uppercase tracking-[0.12em] transition-all ${
                           active
                             ? "bg-[#171512] text-white shadow-[0_6px_16px_rgba(23,21,18,0.25)]"
                             : "border border-black/10 bg-white/40 text-black/45 hover:border-black/20 hover:bg-white hover:text-black"
                         }`}
                       >
                         {category.name}
-
-                        {childCount > 0 && (
-                          <span
-                            className={`rounded-full px-1.5 py-0.5 text-[7px] ${
-                              active
-                                ? "bg-white/20"
-                                : "bg-black/[0.06]"
-                            }`}
-                          >
-                            {childCount}
-                          </span>
-                        )}
                       </button>
                     );
                   }
@@ -1011,7 +1091,7 @@ function ShopPageContent() {
                       )
                     }
                     placeholder="Search products"
-                    className="h-10 w-44 rounded-full border border-black/10 bg-white/50 pl-10 pr-4 text-[10px] outline-none transition-all placeholder:text-black/25 focus:border-black/25 focus:bg-white"
+                    className="h-9 w-44 rounded-full border border-black/10 bg-white/50 pl-10 pr-4 text-[10px] outline-none transition-all placeholder:text-black/25 focus:border-black/25 focus:bg-white"
                     aria-label="Search products"
                   />
                 </div>
@@ -1027,13 +1107,13 @@ function ShopPageContent() {
                         (open) => !open
                       )
                     }
-                    className={`flex h-10 max-w-[190px] items-center gap-2 rounded-full border px-4 text-[9px] font-bold uppercase tracking-[0.1em] transition ${
+                    className={`flex h-9 max-w-[190px] items-center gap-2 rounded-full border px-3.5 text-[9px] font-bold uppercase tracking-[0.1em] transition ${
                       selectedBrandIds.length > 0
                         ? "border-[#a27d37]/40 bg-[#a27d37]/10 text-[#8b692d]"
                         : "border-black/10 bg-white/50 text-black/55 hover:bg-white"
                     }`}
                   >
-                    <span className="max-w-[130px] truncate">
+                    <span className="max-w-[120px] truncate">
                       {selectedBrandLabel}
                     </span>
 
@@ -1049,7 +1129,7 @@ function ShopPageContent() {
                   </button>
 
                   {mobileBrandOpen && (
-                    <div className="absolute right-0 top-12 z-50 w-[260px] overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
+                    <div className="absolute right-0 top-11 z-50 w-[260px] overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
 
                       <div className="flex items-center justify-between border-b border-black/[0.06] px-4 py-3">
 
@@ -1166,7 +1246,7 @@ function ShopPageContent() {
                           .value as SortOption
                       )
                     }
-                    className="h-10 appearance-none rounded-full border border-black/10 bg-white/50 pl-4 pr-8 text-[9px] font-bold uppercase tracking-[0.1em] outline-none transition hover:bg-white"
+                    className="h-9 appearance-none rounded-full border border-black/10 bg-white/50 pl-4 pr-8 text-[9px] font-bold uppercase tracking-[0.1em] outline-none transition hover:bg-white"
                     aria-label="Sort products"
                   >
                     <option value="featured">
@@ -1194,23 +1274,34 @@ function ShopPageContent() {
               </div>
             </div>
 
-            {/* SUB CATEGORIES */}
+            {/* SUB CATEGORIES — compact inline row, only shown when
+                the active main category actually has children.
+                This replaces the old heavyweight "Explore X" block. */}
 
             {activeMainCategory &&
               subCategories.length > 0 && (
-                <div className="flex items-center gap-4 border-t border-black/[0.06] py-3">
+                <div className="flex items-center gap-3 border-t border-black/[0.06] py-2.5">
 
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#a27d37]" />
-
-                    <span className="text-[8px] font-bold uppercase tracking-[0.2em] text-black/35">
-                      {activeMainCategory.name}
-                    </span>
-                  </div>
-
-                  <div className="h-4 w-px bg-black/10" />
+                  <span className="h-1 w-1 shrink-0 rounded-full bg-[#a27d37]" />
 
                   <div className="flex min-w-0 gap-1.5 overflow-x-auto scrollbar-none">
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        changeCategory(
+                          activeMainCategory.id
+                        )
+                      }
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-[8px] font-bold uppercase tracking-[0.1em] transition ${
+                        activeCategory ===
+                        activeMainCategory.id
+                          ? "bg-[#a27d37] text-white"
+                          : "text-black/40 hover:bg-white hover:text-black"
+                      }`}
+                    >
+                      All {activeMainCategory.name}
+                    </button>
 
                     {subCategories.map(
                       (category) => (
@@ -1222,7 +1313,7 @@ function ShopPageContent() {
                               category.id
                             )
                           }
-                          className={`shrink-0 rounded-full px-3.5 py-1.5 text-[8px] font-bold uppercase tracking-[0.1em] transition ${
+                          className={`shrink-0 rounded-full px-3 py-1.5 text-[8px] font-bold uppercase tracking-[0.1em] transition ${
                             activeCategory ===
                             category.id
                               ? "bg-[#a27d37] text-white"
@@ -1235,20 +1326,6 @@ function ShopPageContent() {
                     )}
 
                   </div>
-
-                  {activeCategoryObject?.parent_id && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        changeCategory(
-                          activeMainCategory.id
-                        )
-                      }
-                      className="ml-auto hidden shrink-0 text-[8px] font-bold uppercase tracking-[0.1em] text-[#a27d37] transition hover:text-black lg:block"
-                    >
-                      All {activeMainCategory.name}
-                    </button>
-                  )}
 
                 </div>
               )}
@@ -1263,7 +1340,7 @@ function ShopPageContent() {
 
             {/* SEARCH */}
 
-            <div className="flex h-11 min-w-0 items-center rounded-full border border-black/10 bg-white/60 px-4 shadow-sm">
+            <div className="flex h-10 min-w-0 items-center rounded-full border border-black/10 bg-white/60 px-4 shadow-sm">
 
               <span className="mr-2 shrink-0 text-black/30">
                 <SearchIcon />
@@ -1310,7 +1387,7 @@ function ShopPageContent() {
                     (open) => !open
                   );
                 }}
-                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[9px] font-bold uppercase tracking-[0.08em] shadow-sm transition active:scale-[0.97] ${
+                className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[9px] font-bold uppercase tracking-[0.08em] shadow-sm transition active:scale-[0.97] ${
                   hasActiveCategory
                     ? "border-[#171512] bg-[#171512] text-white"
                     : "border-black/10 bg-white/70 text-black/60"
@@ -1334,7 +1411,7 @@ function ShopPageContent() {
                     (open) => !open
                   );
                 }}
-                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[9px] font-bold uppercase tracking-[0.08em] shadow-sm transition active:scale-[0.97] ${
+                className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[9px] font-bold uppercase tracking-[0.08em] shadow-sm transition active:scale-[0.97] ${
                   selectedBrandIds.length > 0
                     ? "border-[#a27d37]/40 bg-[#a27d37]/10 text-[#8b692d]"
                     : "border-black/10 bg-white/70 text-black/60"
@@ -1365,7 +1442,7 @@ function ShopPageContent() {
                         .value as SortOption
                     )
                   }
-                  className="h-9 appearance-none rounded-full border border-black/10 bg-white/70 py-0 pl-3.5 pr-7 text-[9px] font-bold uppercase tracking-[0.08em] shadow-sm outline-none"
+                  className="h-8 appearance-none rounded-full border border-black/10 bg-white/70 py-0 pl-3 pr-6 text-[9px] font-bold uppercase tracking-[0.08em] shadow-sm outline-none"
                   aria-label="Sort products"
                 >
                   <option value="featured">
@@ -1385,7 +1462,7 @@ function ShopPageContent() {
                   </option>
                 </select>
 
-                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-black/30">
+                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-black/30">
                   <ChevronDown open={false} />
                 </span>
               </div>
@@ -1667,96 +1744,29 @@ function ShopPageContent() {
       </section>
 
       {/* =====================================================
-          CATEGORY CONTEXT
-      ===================================================== */}
-
-      {activeMainCategory &&
-        subCategories.length > 0 && (
-          <section className="border-b border-black/[0.07] bg-[#eeebe3] px-5 py-7 sm:px-8 lg:px-12">
-            <div className="mx-auto max-w-[1440px]">
-
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-
-                <div className="flex items-center gap-4">
-
-                  <div className="hidden h-10 w-10 items-center justify-center rounded-full border border-[#a27d37]/30 bg-[#a27d37]/10 sm:flex">
-                    <span className="h-2 w-2 rounded-full bg-[#a27d37]" />
-                  </div>
-
-                  <div>
-
-                    <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#a27d37]">
-                      {activeMainCategory.name}
-                    </p>
-
-                    <h2 className="mt-1 font-serif text-xl italic tracking-[-0.02em]">
-                      {showingParentCategory
-                        ? `Explore ${activeMainCategory.name}`
-                        : selectedLabel}
-                    </h2>
-
-                    <p className="mt-1 text-[10px] text-black/35">
-                      {showingParentCategory
-                        ? `${subCategories.length} categories available`
-                        : `Products from ${selectedLabel}`}
-                    </p>
-
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-
-                  {subCategories.map(
-                    (category) => (
-                      <button
-                        key={category.id}
-                        type="button"
-                        onClick={() =>
-                          changeCategory(
-                            category.id
-                          )
-                        }
-                        className={`rounded-full border px-3.5 py-2 text-[8px] font-bold uppercase tracking-[0.1em] transition ${
-                          activeCategory ===
-                          category.id
-                            ? "border-[#a27d37] bg-[#a27d37] text-white"
-                            : "border-black/10 bg-white/50 text-black/45 hover:border-black/20 hover:bg-white hover:text-black"
-                        }`}
-                      >
-                        {category.name}
-                      </button>
-                    )
-                  )}
-
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-      {/* =====================================================
           PRODUCTS
+
+          The old "Explore Protein" / sub-category showcase block
+          that used to sit here (with its own heading, blurb and
+          repeated chip row) has been removed entirely — the
+          compact sub-category row inside the sticky filter bar
+          above already covers that job without an extra section,
+          so products now render immediately below the filters.
       ===================================================== */}
 
-      <section className="px-5 py-10 sm:px-8 sm:py-12 lg:px-12 lg:py-16">
+      <section className="px-5 py-6 sm:px-8 sm:py-8 lg:px-12 lg:py-10">
         <div className="mx-auto max-w-[1440px]">
 
-          <div className="mb-7 flex flex-col gap-4 border-b border-black/[0.08] pb-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-black/[0.08] pb-3 sm:mb-5 sm:pb-4">
 
-            <div>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
 
-              <p className="text-[8px] font-bold uppercase tracking-[0.22em] text-[#a27d37]">
-                Collection
-              </p>
-
-              <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.04em]">
+              <h2 className="text-base font-semibold tracking-[-0.03em] sm:text-lg">
                 {selectedLabel}
               </h2>
 
-              {/* SELECTED BRAND CHIPS */}
-
               {selectedBrandIds.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
 
                   {selectedBrands.map(
                     (brand) => (
@@ -1792,26 +1802,47 @@ function ShopPageContent() {
 
             </div>
 
-            <div className="text-left sm:text-right">
-
-              <p className="text-[8px] font-bold uppercase tracking-[0.16em] text-black/30">
-                Showing
-              </p>
-
-              <p className="mt-1 font-serif text-lg italic text-black">
+            <p className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.16em] text-black/35">
+              Showing{" "}
+              <span className="text-black/60">
                 {totalProducts}
-              </p>
-
-            </div>
+              </span>
+            </p>
           </div>
 
-          {pageLoading ? (
+          {pageLoading && products.length === 0 ? (
+            // Nothing cached/visible yet for this filter combo —
+            // this is the only case that still shows the full
+            // skeleton grid.
             <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4 lg:gap-x-6 lg:gap-y-12">
               {skeletonCards}
             </div>
           ) : products.length > 0 ? (
             <>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4 lg:gap-x-6 lg:gap-y-12">
+              {/* Thin top progress bar: shown only while a
+                  background refresh is running for filters that
+                  already have products on screen — the grid itself
+                  never disappears or flashes to a skeleton again. */}
+              {pageLoading && (
+                <div className="relative mb-3 h-[2px] w-full overflow-hidden rounded-full bg-black/[0.06]">
+                  <div className="absolute inset-y-0 left-0 w-1/3 animate-[shopBarSweep_900ms_ease-in-out_infinite] rounded-full bg-[#a27d37]" />
+
+                  <style>{`
+                    @keyframes shopBarSweep {
+                      0% { transform: translateX(-100%); }
+                      100% { transform: translateX(300%); }
+                    }
+                  `}</style>
+                </div>
+              )}
+
+              <div
+                className={`grid grid-cols-2 gap-x-3 gap-y-8 transition-opacity duration-200 sm:grid-cols-3 sm:gap-x-5 sm:gap-y-10 lg:grid-cols-4 lg:gap-x-6 lg:gap-y-12 ${
+                  pageLoading
+                    ? "opacity-60"
+                    : "opacity-100"
+                }`}
+              >
                 {products.map(
                   (product) => (
                     <ProductCard
