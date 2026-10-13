@@ -50,7 +50,7 @@ export function Hero() {
             <span className="h-px w-8 bg-gold sm:w-10" />
 
             <p className="text-[8px] font-semibold uppercase tracking-[0.3em] text-white/75 sm:text-[9px] md:text-[10px]">
-              Seven Bucks Nutrition · Est. 2019
+              Seven Bucks Nutrition · Est. 2017
             </p>
           </div>
 
